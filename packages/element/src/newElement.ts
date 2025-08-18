@@ -5,11 +5,11 @@ import {
   DEFAULT_TEXT_ALIGN,
   DEFAULT_VERTICAL_ALIGN,
   VERTICAL_ALIGN,
-  randomInteger,
-  randomId,
   getFontString,
-  getUpdatedTimestamp,
   getLineHeight,
+  getUpdatedTimestamp,
+  randomId,
+  randomInteger,
 } from "@excalidraw/common";
 
 import type { Radians } from "@excalidraw/math";
@@ -22,32 +22,32 @@ import {
 } from "./bounds";
 import { newElementWith } from "./mutateElement";
 import { getBoundTextMaxWidth } from "./textElement";
-import { normalizeText, measureText } from "./textMeasurements";
+import { measureText, normalizeText } from "./textMeasurements";
 import { wrapText } from "./textWrapping";
 
 import { isLineElement } from "./typeChecks";
 
 import type {
-  ExcalidrawElement,
-  ExcalidrawImageElement,
-  ExcalidrawTextElement,
-  ExcalidrawLinearElement,
-  ExcalidrawGenericElement,
-  NonDeleted,
-  TextAlign,
-  VerticalAlign,
   Arrowhead,
-  ExcalidrawFreeDrawElement,
-  FontFamilyValues,
-  ExcalidrawTextContainer,
-  ExcalidrawFrameElement,
-  ExcalidrawEmbeddableElement,
-  ExcalidrawMagicFrameElement,
-  ExcalidrawIframeElement,
   ElementsMap,
   ExcalidrawArrowElement,
   ExcalidrawElbowArrowElement,
+  ExcalidrawElement,
+  ExcalidrawEmbeddableElement,
+  ExcalidrawFrameElement,
+  ExcalidrawFreeDrawElement,
+  ExcalidrawGenericElement,
+  ExcalidrawIframeElement,
+  ExcalidrawImageElement,
   ExcalidrawLineElement,
+  ExcalidrawLinearElement,
+  ExcalidrawMagicFrameElement,
+  ExcalidrawTextContainer,
+  ExcalidrawTextElement,
+  FontFamilyValues,
+  NonDeleted,
+  TextAlign,
+  VerticalAlign,
 } from "./types";
 
 export type ElementConstructorOpts = MarkOptional<
@@ -150,7 +150,7 @@ const _newElementBase = <T extends ExcalidrawElement>(
     updated: getUpdatedTimestamp(),
     link,
     locked,
-    customData: rest.customData,
+    customData: { isVisible: true, ...(rest.customData || {}) },
   };
   return element;
 };

@@ -1,16 +1,18 @@
 import throttle from "lodash.throttle";
 
 import {
-  randomInteger,
   arrayToMap,
-  toBrandedType,
   isDevEnv,
   isTestEnv,
+  randomInteger,
   toArray,
+  toBrandedType,
 } from "@excalidraw/common";
-import { isNonDeletedElement } from "@excalidraw/element";
-import { isFrameLikeElement } from "@excalidraw/element";
-import { getElementsInGroup } from "@excalidraw/element";
+import {
+  getElementsInGroup,
+  isFrameLikeElement,
+  isNonDeletedElement,
+} from "@excalidraw/element";
 
 import {
   syncInvalidIndices,
@@ -23,15 +25,15 @@ import { getSelectedElements } from "@excalidraw/element";
 import { mutateElement, type ElementUpdate } from "@excalidraw/element";
 
 import type {
-  ExcalidrawElement,
-  NonDeletedExcalidrawElement,
-  NonDeleted,
-  ExcalidrawFrameLikeElement,
   ElementsMapOrArray,
-  SceneElementsMap,
+  ExcalidrawElement,
+  ExcalidrawFrameLikeElement,
+  NonDeleted,
+  NonDeletedExcalidrawElement,
   NonDeletedSceneElementsMap,
-  OrderedExcalidrawElement,
   Ordered,
+  OrderedExcalidrawElement,
+  SceneElementsMap,
 } from "@excalidraw/element/types";
 
 import type {

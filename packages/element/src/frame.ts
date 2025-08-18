@@ -11,13 +11,13 @@ import type {
 
 import type { ReadonlySetLike } from "@excalidraw/common/utility-types";
 
-import { getElementsWithinSelection, getSelectedElements } from "./selection";
 import { getElementsInGroup, selectGroupsFromGivenElements } from "./groups";
+import { getElementsWithinSelection, getSelectedElements } from "./selection";
 
 import {
-  getElementLineSegments,
   getCommonBounds,
   getElementAbsoluteCoords,
+  getElementLineSegments,
 } from "./bounds";
 import { mutateElement } from "./mutateElement";
 import { getBoundTextElement, getContainerElement } from "./textElement";
@@ -444,7 +444,7 @@ export const filterElementsEligibleAsFrameChildren = (
   elements = omitGroupsContainingFrameLikes(elements);
 
   for (const element of elements) {
-    if (isFrameLikeElement(element) && element.id !== frame.id) {
+    if (element.id !== frame.id) {
       otherFrames.add(element.id);
     }
   }
@@ -455,12 +455,13 @@ export const filterElementsEligibleAsFrameChildren = (
 
   for (const element of elements) {
     // don't add frames or their children
-    if (
-      isFrameLikeElement(element) ||
-      (element.frameId && otherFrames.has(element.frameId))
+    /* if (
+      // isFrameLikeElement(element) ||
+      element.frameId &&
+      otherFrames.has(element.frameId)
     ) {
       continue;
-    }
+    }*/
 
     if (element.groupIds.length) {
       const shallowestGroupId = element.groupIds.at(-1)!;
@@ -484,8 +485,25 @@ export const filterElementsEligibleAsFrameChildren = (
       }
     }
   }
-
+  console.log("Eligable elements: ", eligibleElements);
   return eligibleElements;
+};
+
+export const isDescendantFrame = (
+  target: ExcalidrawFrameLikeElement,
+  maybeAncestor: ExcalidrawFrameLikeElement,
+  elementsMap: Map<string, ExcalidrawElement>,
+): boolean => {
+  let current: ExcalidrawElement | undefined = target;
+
+  while (current?.frameId) {
+    if (current.frameId === maybeAncestor.id) {
+      return true;
+    }
+    current = elementsMap.get(current.frameId);
+  }
+
+  return false;
 };
 
 /**
@@ -516,7 +534,7 @@ export const addElementsToFrame = <T extends ElementsMapOrArray>(
   const otherFrames = new Set<ExcalidrawFrameLikeElement["id"]>();
 
   for (const element of elementsToAdd) {
-    if (isFrameLikeElement(element) && element.id !== frame.id) {
+    if (element.id !== frame.id) {
       otherFrames.add(element.id);
     }
   }
@@ -528,10 +546,7 @@ export const addElementsToFrame = <T extends ElementsMapOrArray>(
     elementsToAdd,
   )) {
     // don't add frames or their children
-    if (
-      isFrameLikeElement(element) ||
-      (element.frameId && otherFrames.has(element.frameId))
-    ) {
+    if (element.frameId && otherFrames.has(element.frameId)) {
       continue;
     }
 
@@ -664,7 +679,7 @@ export const updateFrameMembershipOfSelectedElements = <
   elementsToFilter.forEach((element) => {
     if (
       element.frameId &&
-      !isFrameLikeElement(element) &&
+      // !isFrameLikeElement(element) &&
       !isElementInFrame(element, elementsMap, appState)
     ) {
       elementsToRemove.add(element);
@@ -705,6 +720,7 @@ export const omitGroupsContainingFrameLikes = (
         isFrameLikeElement(el),
       )
     ) {
+      console.log("Rejected: ", groupId);
       rejectedGroupIds.add(groupId);
     }
   }

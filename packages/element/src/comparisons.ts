@@ -7,6 +7,7 @@ export const hasBackground = (type: ElementOrToolType) =>
   type === "ellipse" ||
   type === "diamond" ||
   type === "line" ||
+  type === "frame" ||
   type === "freedraw";
 
 export const hasStrokeColor = (type: ElementOrToolType) =>

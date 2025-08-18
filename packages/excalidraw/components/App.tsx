@@ -1,276 +1,277 @@
 import clsx from "clsx";
 import throttle from "lodash.throttle";
+import { nanoid } from "nanoid";
 import React, { useContext } from "react";
 import { flushSync } from "react-dom";
 import rough from "roughjs/bin/rough";
-import { nanoid } from "nanoid";
 
 import {
   clamp,
-  pointFrom,
   pointDistance,
-  vector,
+  pointFrom,
   pointRotateRads,
-  vectorScale,
-  vectorFromPoint,
-  vectorSubtract,
+  vector,
   vectorDot,
+  vectorFromPoint,
   vectorNormalize,
+  vectorScale,
+  vectorSubtract,
 } from "@excalidraw/math";
 
 import {
-  COLOR_PALETTE,
-  CODES,
-  shouldResizeFromCenter,
-  shouldMaintainAspectRatio,
-  shouldRotateWithDiscreteAngle,
-  isArrowKey,
-  KEYS,
+  addEventListener,
   APP_NAME,
+  arrayToMap,
+  ARROW_TYPE,
+  CLASSES,
+  CODES,
+  COLOR_PALETTE,
   CURSOR_TYPE,
+  debounce,
+  DEFAULT_COLLISION_THRESHOLD,
   DEFAULT_MAX_IMAGE_WIDTH_OR_HEIGHT,
+  DEFAULT_REDUCED_GLOBAL_ALPHA,
+  DEFAULT_TEXT_ALIGN,
   DEFAULT_VERTICAL_ALIGN,
+  distance,
   DRAGGING_THRESHOLD,
+  easeOut,
+  easeToValuesRAF,
   ELEMENT_SHIFT_TRANSLATE_AMOUNT,
   ELEMENT_TRANSLATE_AMOUNT,
+  Emitter,
   EVENT,
+  type EXPORT_IMAGE_TYPES,
   FRAME_STYLE,
+  getDateTime,
+  getFontString,
+  getGridPoint,
+  getLineHeight,
+  getNearestScrollableContainer,
+  getShortcutKey,
   IMAGE_MIME_TYPES,
   IMAGE_RENDER_TIMEOUT,
+  isArrowKey,
   isBrave,
+  isDevEnv,
+  isInputLike,
+  isIOS,
+  isLocalLink,
+  isSafari,
+  isShallowEqual,
+  isTestEnv,
+  isToolIcon,
+  isTransparent,
+  isWritableElement,
+  KEYS,
   LINE_CONFIRM_THRESHOLD,
   MAX_ALLOWED_FILE_BYTES,
   MIME_TYPES,
+  MINIMUM_ARROW_SIZE,
   MQ_MAX_HEIGHT_LANDSCAPE,
   MQ_MAX_WIDTH_LANDSCAPE,
   MQ_MAX_WIDTH_PORTRAIT,
   MQ_RIGHT_SIDEBAR_MIN_WIDTH,
+  muteFSAbortError,
+  normalizeEOL,
+  normalizeLink,
   POINTER_BUTTON,
+  POINTER_EVENTS,
+  randomInteger,
   ROUNDNESS,
+  sceneCoordsToViewportCoords,
   SCROLL_TIMEOUT,
+  shouldMaintainAspectRatio,
+  shouldResizeFromCenter,
+  shouldRotateWithDiscreteAngle,
+  supportsResizeObserver,
   TAP_TWICE_TIMEOUT,
   TEXT_TO_CENTER_SNAP_THRESHOLD,
   THEME,
   THEME_FILTER,
-  TOUCH_CTX_MENU_TIMEOUT,
-  VERTICAL_ALIGN,
-  YOUTUBE_STATES,
-  ZOOM_STEP,
-  POINTER_EVENTS,
   TOOL_TYPE,
-  isIOS,
-  supportsResizeObserver,
-  DEFAULT_COLLISION_THRESHOLD,
-  DEFAULT_TEXT_ALIGN,
-  ARROW_TYPE,
-  DEFAULT_REDUCED_GLOBAL_ALPHA,
-  isSafari,
-  isLocalLink,
-  normalizeLink,
+  TOUCH_CTX_MENU_TIMEOUT,
   toValidURL,
-  getGridPoint,
-  getLineHeight,
-  debounce,
-  distance,
-  getFontString,
-  getNearestScrollableContainer,
-  isInputLike,
-  isToolIcon,
-  isWritableElement,
-  sceneCoordsToViewportCoords,
   tupleToCoors,
+  updateActiveTool,
+  updateObject,
+  updateStable,
+  VERTICAL_ALIGN,
   viewportCoordsToSceneCoords,
   wrapEvent,
-  updateObject,
-  updateActiveTool,
-  getShortcutKey,
-  isTransparent,
-  easeToValuesRAF,
-  muteFSAbortError,
-  isTestEnv,
-  isDevEnv,
-  easeOut,
-  updateStable,
-  addEventListener,
-  normalizeEOL,
-  getDateTime,
-  isShallowEqual,
-  arrayToMap,
-  type EXPORT_IMAGE_TYPES,
-  randomInteger,
-  CLASSES,
-  Emitter,
-  MINIMUM_ARROW_SIZE,
+  YOUTUBE_STATES,
+  ZOOM_STEP,
 } from "@excalidraw/common";
 
 import {
-  getObservedAppState,
-  getCommonBounds,
-  maybeSuggestBindingsForLinearElementAtCoords,
-  getElementAbsoluteCoords,
-  bindOrUnbindLinearElements,
-  fixBindingsAfterDeletion,
-  getHoveredElementForBinding,
-  isBindingEnabled,
-  shouldEnableBindingForPointerEvent,
-  updateBoundElements,
-  getSuggestedBindingsForArrows,
-  LinearElementEditor,
-  newElementWith,
-  newFrameElement,
-  newFreeDrawElement,
-  newEmbeddableElement,
-  newMagicFrameElement,
-  newIframeElement,
-  newArrowElement,
-  newElement,
-  newImageElement,
-  newLinearElement,
-  newTextElement,
-  refreshTextDimensions,
-  deepCopyElement,
-  duplicateElements,
-  hasBoundTextElement,
-  isArrowElement,
-  isBindingElement,
-  isBindingElementType,
-  isBoundToContainer,
-  isFrameLikeElement,
-  isImageElement,
-  isEmbeddableElement,
-  isInitializedImageElement,
-  isLinearElement,
-  isLinearElementType,
-  isUsingAdaptiveRadius,
-  isIframeElement,
-  isIframeLikeElement,
-  isMagicFrameElement,
-  isTextBindableContainer,
-  isElbowArrow,
-  isFlowchartNodeElement,
-  isBindableElement,
-  isTextElement,
-  getLockedLinearCursorAlignSize,
-  getNormalizedDimensions,
-  isElementCompletelyInViewport,
-  isElementInViewport,
-  isInvisiblySmallElement,
-  getCornerRadius,
-  isPathALoop,
-  createSrcDoc,
-  embeddableURLValidator,
-  maybeParseEmbedSrc,
-  getEmbedLink,
-  getInitializedImageElements,
-  normalizeSVG,
   updateImageCache as _updateImageCache,
-  getBoundTextElement,
-  getContainerCenter,
-  getContainerElement,
-  isValidTextContainer,
-  redrawTextBoundingBox,
-  shouldShowBoundingBox,
-  getFrameChildren,
-  isCursorInFrame,
   addElementsToFrame,
-  replaceAllElementsInFrame,
-  removeElementsFromFrame,
-  getElementsInResizingFrame,
-  getElementsInNewFrame,
-  getContainingFrame,
-  elementOverlapsWithFrame,
-  updateFrameMembershipOfSelectedElements,
-  isElementInFrame,
-  getFrameLikeTitle,
-  getElementsOverlappingFrame,
-  filterElementsEligibleAsFrameChildren,
-  hitElementBoundText,
-  hitElementBoundingBoxOnly,
-  hitElementItself,
-  getVisibleSceneBounds,
-  FlowChartCreator,
-  FlowChartNavigator,
-  getLinkDirectionFromKey,
+  bindOrUnbindLinearElements,
+  CaptureUpdateAction,
+  createSrcDoc,
   cropElement,
-  wrapText,
-  isElementLink,
-  parseElementLinkFromURL,
-  isMeasureTextSupported,
-  normalizeText,
-  measureText,
-  getLineHeightInPx,
-  getApproxMinLineWidth,
-  getApproxMinLineHeight,
-  getMinTextElementWidth,
-  ShapeCache,
-  getRenderOpacity,
-  editGroupForSelectedElement,
-  getElementsInGroup,
-  getSelectedGroupIdForElement,
-  getSelectedGroupIds,
-  isElementInGroup,
-  isSelectedViaGroup,
-  selectGroupsForSelectedElements,
-  syncInvalidIndices,
-  syncMovedIndices,
-  excludeElementsInFramesFromSelection,
-  getSelectionStateForElements,
-  makeNextSelectedElementIds,
-  getResizeOffsetXY,
-  getResizeArrowDirection,
-  transformElements,
-  getCursorForResizingElement,
-  getElementWithTransformHandleType,
-  getTransformHandleTypeFromCoords,
+  deepCopyElement,
   dragNewElement,
   dragSelectedElements,
-  getDragOffsetXY,
-  isNonDeletedElement,
-  Scene,
-  Store,
-  CaptureUpdateAction,
+  duplicateElements,
+  editGroupForSelectedElement,
+  elementOverlapsWithFrame,
   type ElementUpdate,
+  embeddableURLValidator,
+  excludeElementsInFramesFromSelection,
+  filterElementsEligibleAsFrameChildren,
+  fixBindingsAfterDeletion,
+  FlowChartCreator,
+  FlowChartNavigator,
+  getApproxMinLineHeight,
+  getApproxMinLineWidth,
+  getBoundTextElement,
+  getCommonBounds,
+  getContainerCenter,
+  getContainerElement,
+  getContainingFrame,
+  getCornerRadius,
+  getCursorForResizingElement,
+  getDragOffsetXY,
+  getElementAbsoluteCoords,
+  getElementsInGroup,
+  getElementsInNewFrame,
+  getElementsInResizingFrame,
+  getElementsOverlappingFrame,
+  getElementWithTransformHandleType,
+  getEmbedLink,
+  getFrameChildren,
+  getFrameLikeTitle,
+  getHoveredElementForBinding,
+  getInitializedImageElements,
+  getLineHeightInPx,
+  getLinkDirectionFromKey,
+  getLockedLinearCursorAlignSize,
+  getMinTextElementWidth,
+  getNormalizedDimensions,
+  getObservedAppState,
+  getRenderOpacity,
+  getResizeArrowDirection,
+  getResizeOffsetXY,
+  getSelectedGroupIdForElement,
+  getSelectedGroupIds,
+  getSelectionStateForElements,
+  getSuggestedBindingsForArrows,
+  getTransformHandleTypeFromCoords,
+  getVisibleSceneBounds,
+  hasBoundTextElement,
   hitElementBoundingBox,
+  hitElementBoundingBoxOnly,
+  hitElementBoundText,
+  hitElementItself,
+  isArrowElement,
+  isBindableElement,
+  isBindingElement,
+  isBindingElementType,
+  isBindingEnabled,
+  isBoundToContainer,
+  isCursorInFrame,
+  isDescendantFrame,
+  isElbowArrow,
+  isElementCompletelyInViewport,
+  isElementInFrame,
+  isElementInGroup,
+  isElementInViewport,
+  isElementLink,
+  isEmbeddableElement,
+  isFlowchartNodeElement,
+  isFrameLikeElement,
+  isIframeElement,
+  isIframeLikeElement,
+  isImageElement,
+  isInitializedImageElement,
+  isInvisiblySmallElement,
+  isLinearElement,
+  isLinearElementType,
   isLineElement,
+  isMagicFrameElement,
+  isMeasureTextSupported,
+  isNonDeletedElement,
+  isPathALoop,
+  isSelectedViaGroup,
   isSimpleArrow,
+  isTextBindableContainer,
+  isTextElement,
+  isUsingAdaptiveRadius,
+  isValidTextContainer,
+  LinearElementEditor,
+  makeNextSelectedElementIds,
+  maybeParseEmbedSrc,
+  maybeSuggestBindingsForLinearElementAtCoords,
+  measureText,
+  newArrowElement,
+  newElement,
+  newElementWith,
+  newEmbeddableElement,
+  newFrameElement,
+  newFreeDrawElement,
+  newIframeElement,
+  newImageElement,
+  newLinearElement,
+  newMagicFrameElement,
+  newTextElement,
+  normalizeSVG,
+  normalizeText,
+  parseElementLinkFromURL,
+  redrawTextBoundingBox,
+  refreshTextDimensions,
+  removeElementsFromFrame,
+  replaceAllElementsInFrame,
+  Scene,
+  selectGroupsForSelectedElements,
+  ShapeCache,
+  shouldEnableBindingForPointerEvent,
+  shouldShowBoundingBox,
+  Store,
+  syncInvalidIndices,
+  syncMovedIndices,
+  transformElements,
+  updateBoundElements,
+  updateFrameMembershipOfSelectedElements,
+  wrapText,
 } from "@excalidraw/element";
 
 import type { LocalPoint, Radians } from "@excalidraw/math";
 
 import type {
-  ExcalidrawElement,
-  ExcalidrawFreeDrawElement,
-  ExcalidrawGenericElement,
-  ExcalidrawLinearElement,
-  ExcalidrawTextElement,
-  NonDeleted,
-  InitializedExcalidrawImageElement,
-  ExcalidrawImageElement,
-  FileId,
-  NonDeletedExcalidrawElement,
-  ExcalidrawTextContainer,
-  ExcalidrawFrameLikeElement,
-  ExcalidrawMagicFrameElement,
-  ExcalidrawIframeLikeElement,
-  IframeData,
-  ExcalidrawIframeElement,
-  ExcalidrawEmbeddableElement,
-  Ordered,
-  MagicGenerationData,
   ExcalidrawArrowElement,
   ExcalidrawElbowArrowElement,
+  ExcalidrawElement,
+  ExcalidrawEmbeddableElement,
+  ExcalidrawFrameLikeElement,
+  ExcalidrawFreeDrawElement,
+  ExcalidrawGenericElement,
+  ExcalidrawIframeElement,
+  ExcalidrawIframeLikeElement,
+  ExcalidrawImageElement,
+  ExcalidrawLinearElement,
+  ExcalidrawMagicFrameElement,
+  ExcalidrawTextContainer,
+  ExcalidrawTextElement,
+  FileId,
+  IframeData,
+  InitializedExcalidrawImageElement,
+  MagicGenerationData,
+  NonDeleted,
+  NonDeletedExcalidrawElement,
+  Ordered,
 } from "@excalidraw/element/types";
 
 import type { Mutable, ValueOf } from "@excalidraw/common/utility-types";
 
 import {
   actionAddToLibrary,
+  actionBindText,
   actionBringForward,
   actionBringToFront,
   actionCopy,
   actionCopyAsPng,
   actionCopyAsSvg,
-  copyText,
   actionCopyStyles,
   actionCut,
   actionDeleteSelected,
@@ -279,21 +280,21 @@ import {
   actionFlipHorizontal,
   actionFlipVertical,
   actionGroup,
+  actionLink,
   actionPasteStyles,
   actionSelectAll,
   actionSendBackward,
   actionSendToBack,
+  actionToggleCropEditor,
+  actionToggleElementLock,
   actionToggleGridMode,
+  actionToggleLinearEditor,
+  actionToggleObjectsSnapMode,
   actionToggleStats,
   actionToggleZenMode,
   actionUnbindText,
-  actionBindText,
   actionUngroup,
-  actionLink,
-  actionToggleElementLock,
-  actionToggleLinearEditor,
-  actionToggleObjectsSnapMode,
-  actionToggleCropEditor,
+  copyText,
 } from "../actions";
 import { actionWrapTextInContainer } from "../actions/actionBoundText";
 import { actionToggleHandTool, zoomToFit } from "../actions/actionCanvas";
@@ -327,15 +328,6 @@ import { History } from "../history";
 import { defaultLang, getLanguage, languages, setLanguage, t } from "../i18n";
 
 import {
-  calculateScrollCenter,
-  getElementsWithinSelection,
-  getNormalizedZoom,
-  getSelectedElements,
-  hasBackground,
-  isSomeElementSelected,
-} from "../scene";
-import { getStateForZoom } from "../scene/zoom";
-import {
   dataURLToString,
   generateIdFromFile,
   getDataURL,
@@ -350,42 +342,51 @@ import {
   resizeImageFile,
   SVGStringToFile,
 } from "../data/blob";
-
-import { fileOpen } from "../data/filesystem";
 import {
-  showHyperlinkTooltip,
+  calculateScrollCenter,
+  getElementsWithinSelection,
+  getNormalizedZoom,
+  getSelectedElements,
+  hasBackground,
+  isSomeElementSelected,
+} from "../scene";
+import { getStateForZoom } from "../scene/zoom";
+
+import {
   hideHyperlinkToolip,
   Hyperlink,
+  showHyperlinkTooltip,
 } from "../components/hyperlink/Hyperlink";
+import { fileOpen } from "../data/filesystem";
 
-import { Fonts } from "../fonts";
+import { ElementCanvasButtons } from "../components/ElementCanvasButtons";
+import {
+  resetCursor,
+  setCursor,
+  setCursorForShape,
+  setEraserCursor,
+} from "../cursor";
+import { convertToExcalidrawElements } from "../data/transform";
 import { editorJotaiStore, type WritableAtom } from "../editor-jotai";
 import { ImageSceneDataError } from "../errors";
-import {
-  getSnapLinesAtPointer,
-  snapDraggedElements,
-  isActiveToolNonLinearSnappable,
-  snapNewElement,
-  snapResizingElements,
-  isSnappingEnabled,
-  getVisibleGaps,
-  getReferenceSnapPoints,
-  SnapCache,
-  isGridModeEnabled,
-} from "../snapping";
-import { convertToExcalidrawElements } from "../data/transform";
-import { Renderer } from "../scene/Renderer";
-import {
-  setEraserCursor,
-  setCursor,
-  resetCursor,
-  setCursorForShape,
-} from "../cursor";
-import { ElementCanvasButtons } from "../components/ElementCanvasButtons";
+import { Fonts } from "../fonts";
 import { LaserTrails } from "../laser-trails";
 import { withBatchedUpdates, withBatchedUpdatesThrottled } from "../reactUtils";
-import { textWysiwyg } from "../wysiwyg/textWysiwyg";
+import { Renderer } from "../scene/Renderer";
 import { isOverScrollBars } from "../scene/scrollbars";
+import {
+  getReferenceSnapPoints,
+  getSnapLinesAtPointer,
+  getVisibleGaps,
+  isActiveToolNonLinearSnappable,
+  isGridModeEnabled,
+  isSnappingEnabled,
+  SnapCache,
+  snapDraggedElements,
+  snapNewElement,
+  snapResizingElements,
+} from "../snapping";
+import { textWysiwyg } from "../wysiwyg/textWysiwyg";
 
 import { isMaybeMermaidDefinition } from "../mermaid";
 
@@ -394,14 +395,14 @@ import { LassoTrail } from "../lasso";
 import { EraserTrail } from "../eraser";
 
 import ConvertElementTypePopup, {
-  getConversionTypeFromElements,
   convertElementTypePopupAtom,
   convertElementTypes,
+  getConversionTypeFromElements,
 } from "./ConvertElementTypePopup";
 
 import { activeConfirmDialogAtom } from "./ActiveConfirmDialog";
 import BraveMeasureTextError from "./BraveMeasureTextError";
-import { ContextMenu, CONTEXT_MENU_SEPARATOR } from "./ContextMenu";
+import { CONTEXT_MENU_SEPARATOR, ContextMenu } from "./ContextMenu";
 import { activeEyeDropperAtom } from "./EyeDropper";
 import FollowMode from "./FollowMode/FollowMode";
 import LayerUI from "./LayerUI";
@@ -409,14 +410,14 @@ import { ElementCanvasButton } from "./MagicButton";
 import { SVGLayer } from "./SVGLayer";
 import { searchItemInFocusAtom } from "./SearchMenu";
 import { isSidebarDockedAtom } from "./Sidebar/Sidebar";
-import { StaticCanvas, InteractiveCanvas } from "./canvases";
+import { Toast } from "./Toast";
+import { InteractiveCanvas, StaticCanvas } from "./canvases";
 import NewElementCanvas from "./canvases/NewElementCanvas";
 import {
   isPointHittingLink,
   isPointHittingLinkIcon,
 } from "./hyperlink/helpers";
-import { MagicIcon, copyIcon, fullscreenIcon } from "./icons";
-import { Toast } from "./Toast";
+import { copyIcon, fullscreenIcon, MagicIcon } from "./icons";
 
 import { findShapeByKey } from "./shapes";
 
@@ -427,9 +428,10 @@ import type {
   ScrollBars,
 } from "../scene/types";
 
+import type { RoughCanvas } from "roughjs/bin/canvas";
+import type { Action, ActionResult } from "../actions/types";
 import type { PastedMixedContent } from "../clipboard";
 import type { ExportedElements } from "../data";
-import type { ContextMenuItems } from "./ContextMenu";
 import type { FileSystemHandle } from "../data/filesystem";
 import type { ExcalidrawElementSkeleton } from "../data/transform";
 import type {
@@ -437,30 +439,29 @@ import type {
   AppProps,
   AppState,
   BinaryFileData,
-  ExcalidrawImperativeAPI,
   BinaryFiles,
+  CollaboratorPointer,
+  Device,
+  ElementsPendingErasure,
+  EmbedsValidationStatus,
+  ExcalidrawImperativeAPI,
+  FrameNameBoundsCache,
+  GenerateDiagramToCode,
   Gesture,
   GestureEvent,
-  LibraryItems,
-  PointerDownState,
-  SceneData,
-  Device,
-  FrameNameBoundsCache,
-  SidebarName,
-  SidebarTabName,
   KeyboardModifiersObject,
-  CollaboratorPointer,
-  ToolType,
-  OnUserFollowedPayload,
-  UnsubscribeCallback,
-  EmbedsValidationStatus,
-  ElementsPendingErasure,
-  GenerateDiagramToCode,
+  LibraryItems,
   NullableGridSize,
   Offsets,
+  OnUserFollowedPayload,
+  PointerDownState,
+  SceneData,
+  SidebarName,
+  SidebarTabName,
+  ToolType,
+  UnsubscribeCallback,
 } from "../types";
-import type { RoughCanvas } from "roughjs/bin/canvas";
-import type { Action, ActionResult } from "../actions/types";
+import type { ContextMenuItems } from "./ContextMenu";
 
 const AppContext = React.createContext<AppClassProperties>(null!);
 const AppPropsContext = React.createContext<AppProps>(null!);
@@ -3259,6 +3260,9 @@ class App extends React.Component<AppProps, AppState> {
         duplicatedElements,
         topLayerFrame,
       );
+
+      console.log("Eligable: ", eligibleElements);
+
       addElementsToFrame(
         nextElements,
         eligibleElements,
@@ -5706,10 +5710,22 @@ class App extends React.Component<AppProps, AppState> {
     y: number;
   }) => {
     const elementsMap = this.scene.getNonDeletedElementsMap();
+
+    // Get selected frame (assume only one frame selected)
+    const selectedFrame = Object.keys(this.state.selectedElementIds)
+      .map((id) => elementsMap.get(id))
+      .find(
+        (el) => el && el.type === "frame",
+      ) as ExcalidrawFrameLikeElement | null;
+
     const frames = this.scene
       .getNonDeletedFramesLikes()
-      .filter((frame): frame is ExcalidrawFrameLikeElement =>
-        isCursorInFrame(sceneCoords, frame, elementsMap),
+      .filter(
+        (frame) =>
+          isCursorInFrame(sceneCoords, frame, elementsMap) &&
+          (!selectedFrame ||
+            (frame.id !== selectedFrame.id &&
+              !isDescendantFrame(frame, selectedFrame, elementsMap))),
       );
 
     return frames.length ? frames[frames.length - 1] : null;
@@ -7300,6 +7316,7 @@ class App extends React.Component<AppProps, AppState> {
                 // if hitElement is frame-like, deselect all of its elements
                 // if they are selected
                 if (isFrameLikeElement(hitElement)) {
+                  console.log("Hit frame!");
                   getFrameChildren(
                     previouslySelectedElements,
                     hitElement.id,
@@ -8260,14 +8277,22 @@ class App extends React.Component<AppProps, AppState> {
           return;
         }
 
-        const selectedElementsHasAFrame = selectedElements.find((e) =>
-          isFrameLikeElement(e),
+        // Gather all selected frame IDs
+        const selectedFrameIds = new Set(
+          selectedElements.filter(isFrameLikeElement).map((el) => el.id),
         );
+
+        // Determine the topmost frame under the pointer
         const topLayerFrame = this.getTopLayerFrameAtSceneCoords(pointerCoords);
+
+        // Highlight if topLayerFrame exists AND is not already selected
         const frameToHighlight =
-          topLayerFrame && !selectedElementsHasAFrame ? topLayerFrame : null;
-        // Only update the state if there is a difference
-        if (this.state.frameToHighlight !== frameToHighlight) {
+          topLayerFrame && !selectedFrameIds.has(topLayerFrame.id)
+            ? topLayerFrame
+            : null;
+
+        // Only update if changed
+        if (this.state.frameToHighlight?.id !== frameToHighlight?.id) {
           flushSync(() => {
             this.setState({ frameToHighlight });
           });
@@ -11158,8 +11183,8 @@ class App extends React.Component<AppProps, AppState> {
 // -----------------------------------------------------------------------------
 // TEST HOOKS
 // -----------------------------------------------------------------------------
-declare global {
-  interface Window {
+
+/*interface Window {
     h: {
       scene: Scene;
       elements: readonly ExcalidrawElement[];
@@ -11169,6 +11194,12 @@ declare global {
       history: History;
       store: Store;
     };
+  }
+}*/
+
+declare global {
+  interface Window {
+    h: typeof window.h;
   }
 }
 

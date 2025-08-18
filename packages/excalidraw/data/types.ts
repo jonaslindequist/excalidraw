@@ -2,7 +2,9 @@ import type { VERSIONS } from "@excalidraw/common";
 
 import type { ExcalidrawElement } from "@excalidraw/element/types";
 
+import { Scene, Store } from "@excalidraw/element";
 import type { cleanAppStateForExport } from "../appState";
+import App from "../components/App";
 import type {
   AppState,
   BinaryFiles,
@@ -17,6 +19,20 @@ export interface ExportedDataState {
   elements: readonly ExcalidrawElement[];
   appState: ReturnType<typeof cleanAppStateForExport>;
   files: BinaryFiles | undefined;
+}
+
+declare global {
+  interface Window {
+    h: {
+      app: InstanceType<typeof App>;
+      scene: Scene;
+      elements: readonly ExcalidrawElement[];
+      state: AppState;
+      setState: React.Component<any, AppState>["setState"];
+      history: History;
+      store: Store;
+    };
+  }
 }
 
 /**

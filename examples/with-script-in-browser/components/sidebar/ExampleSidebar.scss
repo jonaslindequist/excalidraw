@@ -64,3 +64,8 @@
 .sidebar-open {
   margin-left: 300px;
 }
+
+.sidebar.sidebar--right {
+  left: auto !important;
+  right: 0 !important;
+}

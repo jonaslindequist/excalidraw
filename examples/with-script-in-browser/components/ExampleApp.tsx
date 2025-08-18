@@ -1,11 +1,11 @@
 import { nanoid } from "nanoid";
 import React, {
-  useEffect,
-  useState,
-  useRef,
-  useCallback,
   Children,
   cloneElement,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
 } from "react";
 
 import type * as TExcalidraw from "@excalidraw/excalidraw";
@@ -19,16 +19,16 @@ import type {
   BinaryFileData,
   ExcalidrawImperativeAPI,
   ExcalidrawInitialDataState,
+  PointerDownState as ExcalidrawPointerDownState,
   Gesture,
   LibraryItems,
-  PointerDownState as ExcalidrawPointerDownState,
 } from "@excalidraw/excalidraw/types";
 
 import initialData from "../initialData";
 import {
-  resolvablePromise,
   distance2d,
   fileOpen,
+  resolvablePromise,
   withBatchedUpdates,
   withBatchedUpdatesThrottled,
 } from "../utils";
@@ -40,6 +40,11 @@ import ExampleSidebar from "./sidebar/ExampleSidebar";
 import "./ExampleApp.scss";
 
 import type { ResolvablePromise } from "../utils";
+import { ExpandableFrameOverlay } from "./ExpandableFrameOverlay";
+import { FactsPanel } from "./FactsPanel";
+import { SidebarStack } from "./SidebarStack";
+import { SidePanel } from "./sidebar/SidePanel";
+import { AddExpandableFrameButton } from "./tools/ExpandableFrameButton";
 
 type Comment = {
   x: number;
@@ -63,7 +68,6 @@ type PointerDownState = {
 const COMMENT_ICON_DIMENSION = 32;
 const COMMENT_INPUT_HEIGHT = 50;
 const COMMENT_INPUT_WIDTH = 150;
-
 export interface AppProps {
   appTitle: string;
   useCustom: (api: ExcalidrawImperativeAPI | null, customArgs?: any[]) => void;
@@ -116,6 +120,13 @@ export default function ExampleApp({
     {},
   );
   const [comment, setComment] = useState<Comment | null>(null);
+  const [scrollVersion, setScrollVersion] = useState(0);
+
+  const onScrollChange = () => {
+    rerenderCommentIcons();
+    setScrollVersion((v) => v + 1);
+    return true;
+  };
 
   const initialStatePromiseRef = useRef<{
     promise: ResolvablePromise<ExcalidrawInitialDataState | null>;
@@ -183,9 +194,7 @@ export default function ExampleApp({
         onChange: (
           elements: NonDeletedExcalidrawElement[],
           state: AppState,
-        ) => {
-          console.info("Elements :", elements, "State : ", state);
-        },
+        ) => {},
         onPointerUpdate: (payload: {
           pointer: { x: number; y: number };
           button: "down" | "up";
@@ -206,7 +215,7 @@ export default function ExampleApp({
         renderTopRightUI,
         onLinkOpen,
         onPointerDown,
-        onScrollChange: rerenderCommentIcons,
+        onScrollChange: onScrollChange,
         validateEmbeddable: true,
       },
       <>
@@ -222,7 +231,9 @@ export default function ExampleApp({
         <Sidebar name="custom">
           <Sidebar.Tabs>
             <Sidebar.Header />
-            <Sidebar.Tab tab="one">Tab one!</Sidebar.Tab>
+            <Sidebar.Tab tab="one">
+              <SidebarStack excalidrawAPI={excalidrawAPI} />
+            </Sidebar.Tab>
             <Sidebar.Tab tab="two">Tab two!</Sidebar.Tab>
             <Sidebar.TabTriggers>
               <Sidebar.TabTrigger tab="one">One</Sidebar.TabTrigger>
@@ -243,6 +254,12 @@ export default function ExampleApp({
         >
           Toggle Custom Sidebar
         </Sidebar.Trigger>
+        <SidePanel>
+          <FactsPanel
+            excalidrawAPI={excalidrawAPI}
+            elements={excalidrawAPI?.getSceneElements()}
+          />
+        </SidePanel>
         {renderMenu()}
         {excalidrawAPI && (
           <TTDDialogTrigger icon={<span>😀</span>}>
@@ -266,12 +283,15 @@ export default function ExampleApp({
     return (
       <>
         {!isMobile && (
-          <LiveCollaborationTrigger
-            isCollaborating={isCollaborating}
-            onSelect={() => {
-              window.alert("Collab dialog clicked");
-            }}
-          />
+          <div>
+            <LiveCollaborationTrigger
+              isCollaborating={isCollaborating}
+              onSelect={() => {
+                window.alert("Collab dialog clicked");
+              }}
+            />
+            <AddExpandableFrameButton api={excalidrawAPI} />
+          </div>
         )}
         <button
           onClick={() => alert("This is an empty top right UI")}
@@ -307,7 +327,6 @@ export default function ExampleApp({
             strokeWidth: 1,
             strokeStyle: "solid",
             roughness: 1,
-            angle: 0,
             x: 100.50390625,
             y: 93.67578125,
             strokeColor: "#c92a2a",
@@ -799,6 +818,7 @@ export default function ExampleApp({
         </div>
         <div className="excalidraw-wrapper">
           {renderExcalidraw(children)}
+          {excalidrawAPI && <ExpandableFrameOverlay api={excalidrawAPI} />}
           {Object.keys(commentIcons || []).length > 0 && renderCommentIcons()}
           {comment && renderComment()}
         </div>

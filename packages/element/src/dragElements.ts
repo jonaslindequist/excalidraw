@@ -1,7 +1,7 @@
 import {
   TEXT_AUTOWRAP_THRESHOLD,
-  getGridPoint,
   getFontString,
+  getGridPoint,
 } from "@excalidraw/common";
 
 import type {

@@ -1,15 +1,13 @@
 import { FRAME_STYLE, throttleRAF } from "@excalidraw/common";
-import { isElementLink } from "@excalidraw/element";
-import { createPlaceholderEmbeddableLabel } from "@excalidraw/element";
-import { getBoundTextElement } from "@excalidraw/element";
 import {
+  createPlaceholderEmbeddableLabel,
+  elementOverlapsWithFrame,
+  getBoundTextElement,
+  getTargetFrame,
+  isElementLink,
   isEmbeddableElement,
   isIframeLikeElement,
   isTextElement,
-} from "@excalidraw/element";
-import {
-  elementOverlapsWithFrame,
-  getTargetFrame,
   shouldApplyFrameClip,
 } from "@excalidraw/element";
 
@@ -24,8 +22,8 @@ import type {
 } from "@excalidraw/element/types";
 
 import {
-  EXTERNAL_LINK_IMG,
   ELEMENT_LINK_IMG,
+  EXTERNAL_LINK_IMG,
   getLinkHandleFromCoords,
 } from "../components/hyperlink/helpers";
 
@@ -368,7 +366,11 @@ const _renderStaticScene = ({
 
   // render embeddables on top
   visibleElements
-    .filter((el) => isIframeLikeElement(el))
+    .filter(
+      (el) =>
+        el.customData?.isVisible !== false && // 👈 skip hidden elements
+        !isIframeLikeElement(el),
+    )
     .forEach((element) => {
       try {
         const render = () => {

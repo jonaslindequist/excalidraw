@@ -1,5 +1,5 @@
-import rough from "roughjs/bin/rough";
 import { getStroke } from "perfect-freehand";
+import rough from "roughjs/bin/rough";
 
 import { isRightAngleRads } from "@excalidraw/math";
 
@@ -12,62 +12,62 @@ import {
   THEME,
   distance,
   getFontString,
-  isRTL,
   getVerticalOffset,
+  isRTL,
 } from "@excalidraw/common";
 
 import type {
   AppState,
+  ElementsPendingErasure,
+  InteractiveCanvasAppState,
+  NormalizedZoomValue,
+  PendingExcalidrawElements,
   StaticCanvasAppState,
   Zoom,
-  InteractiveCanvasAppState,
-  ElementsPendingErasure,
-  PendingExcalidrawElements,
-  NormalizedZoomValue,
 } from "@excalidraw/excalidraw/types";
 
 import type {
-  StaticCanvasRenderConfig,
-  RenderableElementsMap,
   InteractiveCanvasRenderConfig,
+  RenderableElementsMap,
+  StaticCanvasRenderConfig,
 } from "@excalidraw/excalidraw/scene/types";
 
 import { getElementAbsoluteCoords } from "./bounds";
 import { getUncroppedImageElement } from "./cropElement";
+import { getContainingFrame } from "./frame";
 import { LinearElementEditor } from "./linearElementEditor";
 import {
   getBoundTextElement,
-  getContainerCoords,
-  getContainerElement,
   getBoundTextMaxHeight,
   getBoundTextMaxWidth,
+  getContainerCoords,
+  getContainerElement,
 } from "./textElement";
 import { getLineHeightInPx } from "./textMeasurements";
 import {
-  isTextElement,
-  isLinearElement,
-  isFreeDrawElement,
-  isInitializedImageElement,
-  isArrowElement,
   hasBoundTextElement,
-  isMagicFrameElement,
+  isArrowElement,
+  isFreeDrawElement,
   isImageElement,
+  isInitializedImageElement,
+  isLinearElement,
+  isMagicFrameElement,
+  isTextElement,
 } from "./typeChecks";
-import { getContainingFrame } from "./frame";
 import { getCornerRadius } from "./utils";
 
 import { ShapeCache } from "./shape";
 
 import type {
+  ElementsMap,
   ExcalidrawElement,
-  ExcalidrawTextElement,
-  NonDeletedExcalidrawElement,
+  ExcalidrawFrameLikeElement,
   ExcalidrawFreeDrawElement,
   ExcalidrawImageElement,
+  ExcalidrawTextElement,
   ExcalidrawTextElementWithContainer,
-  ExcalidrawFrameLikeElement,
+  NonDeletedExcalidrawElement,
   NonDeletedSceneElementsMap,
-  ElementsMap,
 } from "./types";
 
 import type { StrokeOptions } from "perfect-freehand";
@@ -750,6 +750,27 @@ export const renderElement = (
           element.y + appState.scrollY,
         );
         context.fillStyle = "rgba(0, 0, 200, 0.04)";
+
+        if (
+          element.backgroundColor &&
+          element.backgroundColor !== "transparent"
+        ) {
+          context.fillStyle = element.backgroundColor;
+          if (FRAME_STYLE.radius && context.roundRect) {
+            context.beginPath();
+            context.roundRect(
+              0,
+              0,
+              element.width,
+              element.height,
+              FRAME_STYLE.radius / appState.zoom.value,
+            );
+            context.fill();
+            context.closePath();
+          } else {
+            context.fillRect(0, 0, element.width, element.height);
+          }
+        }
 
         context.lineWidth = FRAME_STYLE.strokeWidth / appState.zoom.value;
         context.strokeStyle = FRAME_STYLE.strokeColor;

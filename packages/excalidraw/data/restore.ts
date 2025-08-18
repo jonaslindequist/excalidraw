@@ -1,34 +1,28 @@
 import { isFiniteNumber, pointFrom } from "@excalidraw/math";
 
 import {
+  arrayToMap,
+  DEFAULT_ELEMENT_PROPS,
   DEFAULT_FONT_FAMILY,
+  DEFAULT_GRID_SIZE,
+  DEFAULT_GRID_STEP,
+  DEFAULT_SIDEBAR,
   DEFAULT_TEXT_ALIGN,
   DEFAULT_VERTICAL_ALIGN,
   FONT_FAMILY,
-  ROUNDNESS,
-  DEFAULT_SIDEBAR,
-  DEFAULT_ELEMENT_PROPS,
-  DEFAULT_GRID_SIZE,
-  DEFAULT_GRID_STEP,
-  randomId,
-  getUpdatedTimestamp,
-  updateActiveTool,
-  arrayToMap,
-  getSizeFromPoints,
-  normalizeLink,
   getLineHeight,
+  getSizeFromPoints,
+  getUpdatedTimestamp,
+  normalizeLink,
+  randomId,
+  ROUNDNESS,
+  updateActiveTool,
 } from "@excalidraw/common";
-import { getNonDeletedElements, isValidPolygon } from "@excalidraw/element";
-import { normalizeFixedPoint } from "@excalidraw/element";
 import {
-  updateElbowArrowPoints,
-  validateElbowPoints,
-} from "@excalidraw/element";
-import { LinearElementEditor } from "@excalidraw/element";
-import { bumpVersion } from "@excalidraw/element";
-import { getContainerElement } from "@excalidraw/element";
-import { detectLineHeight } from "@excalidraw/element";
-import {
+  bumpVersion,
+  detectLineHeight,
+  getContainerElement,
+  getNonDeletedElements,
   isArrowBoundToElement,
   isArrowElement,
   isElbowArrow,
@@ -37,6 +31,11 @@ import {
   isLineElement,
   isTextElement,
   isUsingAdaptiveRadius,
+  isValidPolygon,
+  LinearElementEditor,
+  normalizeFixedPoint,
+  updateElbowArrowPoints,
+  validateElbowPoints,
 } from "@excalidraw/element";
 
 import { syncInvalidIndices } from "@excalidraw/element";
