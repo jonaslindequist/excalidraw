@@ -5,6 +5,7 @@
   "dependencies": {
     "@excalidraw/excalidraw": "*",
     "browser-fs-access": "0.29.1",
+    "lucide-react": "0.540.0",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "react-router-dom": "7.7.1"

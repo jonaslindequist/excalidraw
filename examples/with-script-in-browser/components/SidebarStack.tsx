@@ -1,5 +1,13 @@
 import { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+import { Eye, EyeOff } from "lucide-react"; // Optional: replace with your own icons
+import { useState } from "react";
+
+type TreeNode = {
+  frame: ExcalidrawElement;
+  children: ExcalidrawElement[];
+  nestedFrames: TreeNode[];
+};
 
 export const SidebarStack = ({
   excalidrawAPI,
@@ -8,112 +16,161 @@ export const SidebarStack = ({
 }) => {
   const elements = excalidrawAPI.getSceneElements();
 
-  const groupMap: Record<string, ExcalidrawElement[]> = {};
-  const ungrouped: ExcalidrawElement[] = [];
+  const [expandedFrames, setExpandedFrames] = useState<Set<string>>(new Set());
+
+  const toggleFrame = (frameId: string) => {
+    const next = new Set(expandedFrames);
+    next.has(frameId) ? next.delete(frameId) : next.add(frameId);
+    setExpandedFrames(next);
+  };
+
+  // Build a map of elements by frameId
+  const frameMap = new Map<string, ExcalidrawElement>();
+  const elementsInFrame = new Map<string, ExcalidrawElement[]>();
 
   elements.forEach((el) => {
-    const gids = Array.isArray(el.groupIds) ? el.groupIds : [];
-    if (gids.length) {
-      gids.forEach((gid) => {
-        if (!groupMap[gid]) groupMap[gid] = [];
-        groupMap[gid].push(el);
-      });
-    } else {
-      ungrouped.push(el);
+    if (el.type === "frame") {
+      frameMap.set(el.id, el);
+    }
+    if (el.frameId) {
+      if (!elementsInFrame.has(el.frameId)) {
+        elementsInFrame.set(el.frameId, []);
+      }
+      elementsInFrame.get(el.frameId)!.push(el);
     }
   });
 
-  const groups = Object.entries(groupMap);
+  // Build the tree recursively
+  const buildTree = (frame: ExcalidrawElement): TreeNode => {
+    const children = elementsInFrame.get(frame.id) || [];
+    const nestedFrames = children
+      .filter((el) => el.type === "frame")
+      .map((el) => buildTree(el));
 
-  const renderElementInfo = (el: ExcalidrawElement) => {
+    const otherElements = children.filter((el) => el.type !== "frame");
+
+    return {
+      frame,
+      children: otherElements,
+      nestedFrames,
+    };
+  };
+
+  // Top-level frames (not inside any other frame)
+  const topFrames = elements
+    .filter((el) => el.type === "frame" && !el.frameId)
+    .map((el) => buildTree(el));
+
+  const unframedElements = elements.filter(
+    (el) => !el.frameId && el.type !== "frame",
+  );
+
+  const renderElement = (el: ExcalidrawElement) => {
     return (
       <div
         key={el.id}
         style={{
-          padding: "4px 6px",
-          border: "1px solid #ddd",
-          borderRadius: 4,
-          marginBottom: 4,
-          fontSize: 12,
-          lineHeight: 1.3,
-          backgroundColor: "#fafafa",
+          display: "flex",
+          justifyContent: "space-between",
+          fontSize: 13,
+          padding: "2px 0",
+          paddingLeft: 20,
         }}
       >
-        <div>
-          <strong>
-            {el.type} {getEmojiForType(el.type)}
-          </strong>
-        </div>
-        <div>ID: {el.id.slice(0, 8)}</div>
-        <div>
-          Pos: ({Math.round(el.x)}, {Math.round(el.y)})
-        </div>
-        <div>
-          Size: {Math.round(el.width)}×{Math.round(el.height)}
-        </div>
-        {el.frameId && <div>Frame ID: {el.frameId.slice(0, 5)}</div>}
-        {el.frameId && (
-          <div>
-            Frame ID: <code>{el.frameId}</code>
-          </div>
-        )}
-        <div>
-          Frame ID: <code>{el.frameId ?? "null"}</code>
-        </div>
-        {el.groupIds.length > 0 && (
-          <div>Groups: {el.groupIds.map((g) => g.slice(0, 5)).join(", ")}</div>
-        )}
-        <div>Visible: {String(el.customData?.isVisible ?? true)}</div>
+        <span>
+          {getEmojiForType(el.type)} {el.type}
+        </span>
+        <span title="Visible">
+          {el.customData?.isVisible ?? true ? (
+            <Eye size={14} />
+          ) : (
+            <EyeOff size={14} />
+          )}
+        </span>
       </div>
     );
   };
 
-  const getEmojiForType = (type: ExcalidrawElement["type"]) => {
-    switch (type) {
-      case "rectangle":
-        return "🔲";
-      case "ellipse":
-        return "⚪";
-      case "freedraw":
-        return "✏️";
-      case "text":
-        return "📝";
-      case "line":
-        return "📏";
-      case "arrow":
-        return "➡️";
-      case "image":
-        return "🖼️";
-      case "frame":
-        return "🗂️";
-      default:
-        return "";
-    }
+  const renderTree = (node: TreeNode, depth: number = 0) => {
+    const isOpen = expandedFrames.has(node.frame.id);
+    return (
+      <div
+        key={node.frame.id}
+        style={{ paddingLeft: depth * 12, marginBottom: 6 }}
+      >
+        <div
+          onClick={() => toggleFrame(node.frame.id)}
+          style={{
+            fontWeight: "bold",
+            cursor: "pointer",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            fontSize: 14,
+            backgroundColor: "#f5f5f5",
+            padding: "4px 6px",
+            borderRadius: 4,
+          }}
+        >
+          <span>
+            {isOpen ? "▾" : "▸"} {getEmojiForType("frame")}{" "}
+            {node.frame.id || "Unnamed Frame"}
+          </span>
+          <span title="Visible">
+            {node.frame.customData?.isVisible ?? true ? (
+              <Eye size={14} />
+            ) : (
+              <EyeOff size={14} />
+            )}
+          </span>
+        </div>
+
+        {isOpen && (
+          <div style={{ marginLeft: 8 }}>
+            {node.children.map(renderElement)}
+            {node.nestedFrames.map((childFrame) =>
+              renderTree(childFrame, depth + 1),
+            )}
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
     <div style={{ padding: "1rem", width: 300, overflowY: "auto" }}>
-      {groups.map(([gid, members]) => (
-        <div key={gid} style={{ marginBottom: "1.5rem" }}>
-          <div style={{ fontWeight: "bold", marginBottom: 6 }}>
-            🧩 Group {gid.slice(0, 5)} ({members.length})
+      {topFrames.map((tree) => renderTree(tree))}
+      {unframedElements.length > 0 && (
+        <div style={{ marginTop: "1rem" }}>
+          <div style={{ fontWeight: "bold", marginBottom: 4 }}>
+            📦 Ungrouped
           </div>
-          <div>{members.map(renderElementInfo)}</div>
+          {unframedElements.map(renderElement)}
         </div>
-      ))}
-
-      {ungrouped.length > 0 && (
-        <div style={{ marginTop: groups.length ? "2rem" : 0 }}>
-          <div style={{ fontWeight: "bold", marginBottom: 6 }}>
-            📦 Ungrouped ({ungrouped.length})
-          </div>
-          <div>{ungrouped.map(renderElementInfo)}</div>
-        </div>
-      )}
-
-      {groups.length === 0 && ungrouped.length === 0 && (
-        <p style={{ fontStyle: "italic" }}>No elements on canvas.</p>
       )}
     </div>
   );
+};
+
+const getEmojiForType = (type: ExcalidrawElement["type"]) => {
+  switch (type) {
+    case "rectangle":
+      return "🔲";
+    case "ellipse":
+      return "⚪";
+    case "freedraw":
+      return "✏️";
+    case "text":
+      return "📝";
+    case "line":
+      return "📏";
+    case "arrow":
+      return "➡️";
+    case "image":
+      return "🖼️";
+    case "frame":
+      return "🗂️";
+    default:
+      return "";
+  }
 };

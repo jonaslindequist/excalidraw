@@ -1,10 +1,47 @@
-import type { ExcalidrawFrameElement } from "@excalidraw/element/types";
+import type {
+  ExcalidrawElement,
+  ExcalidrawFrameElement,
+} from "@excalidraw/element/types";
 import { sceneCoordsToViewportCoords } from "@excalidraw/excalidraw";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import { useMemo, useState } from "react";
 
 type Props = {
   api: ExcalidrawImperativeAPI | null;
+};
+
+const setDescendantVisibility = (
+  frame: ExcalidrawFrameElement,
+  allElements: readonly ExcalidrawElement[],
+  parentVisible: boolean,
+): ExcalidrawElement[] => {
+  const updatedElements: ExcalidrawElement[] = [];
+
+  const apply = (currentFrame: ExcalidrawFrameElement, visible: boolean) => {
+    for (const el of allElements) {
+      if (el.frameId === currentFrame.id) {
+        const isFrame = el.type === "frame";
+        const isCollapsed = el.customData?.collapsed === true;
+
+        const shouldBeVisible = visible && (!isFrame || !isCollapsed);
+
+        updatedElements.push({
+          ...el,
+          customData: {
+            ...el.customData,
+            isVisible: shouldBeVisible,
+          },
+        });
+
+        if (isFrame) {
+          apply(el as ExcalidrawFrameElement, shouldBeVisible);
+        }
+      }
+    }
+  };
+
+  apply(frame, parentVisible);
+  return updatedElements;
 };
 
 export function ExpandableFrameOverlay({ api }: Props) {
@@ -34,7 +71,7 @@ export function ExpandableFrameOverlay({ api }: Props) {
 
     const frame = allElements.find(
       (el) => el.id === frameId && el.type === "frame",
-    );
+    ) as ExcalidrawFrameElement;
 
     console.log("Frame: ", frame);
     console.log("Frame name: ", frame.id);
@@ -44,45 +81,39 @@ export function ExpandableFrameOverlay({ api }: Props) {
 
     const isCollapsed = collapsedFrames.has(frameId);
 
-    const updatedElements = allElements.map((el) => {
-      if (el.frameId === frameId && el.id !== frameId) {
-        console.log("Element: ", el);
-        return {
-          ...el,
-          customData: {
-            ...el.customData,
-            isVisible: isCollapsed, // show if expanding, hide if collapsing
-          },
-        };
-      }
-
-      if (el.id === frameId) {
-        return {
-          ...el,
-          width: isCollapsed ? el.customData?.originalWidth || el.width : 200,
-          height: isCollapsed
-            ? el.customData?.originalHeight || el.height
-            : 100,
-          customData: {
-            ...el.customData,
-            ...(isCollapsed
-              ? {} // do not overwrite when expanding
-              : {
-                  originalWidth: el.width,
-                  originalHeight: el.height,
-                }),
-          },
-        };
-      }
-
-      return el;
-    });
+    const updatedElements = [
+      {
+        ...frame,
+        width: isCollapsed
+          ? frame.customData?.originalWidth || frame.width
+          : 200,
+        height: isCollapsed
+          ? frame.customData?.originalHeight || frame.height
+          : 100,
+        customData: {
+          ...frame.customData,
+          collapsed: !isCollapsed,
+          ...(isCollapsed
+            ? {} // restoring dimensions
+            : {
+                originalWidth: frame.width,
+                originalHeight: frame.height,
+              }),
+        },
+      },
+      ...setDescendantVisibility(frame, allElements, isCollapsed),
+    ];
 
     const next = new Set(collapsedFrames);
     isCollapsed ? next.delete(frameId) : next.add(frameId);
     setCollapsedFrames(next);
 
-    api.updateScene({ elements: updatedElements });
+    const mergedElements = allElements.map((el) => {
+      const updated = updatedElements.find((u) => u.id === el.id);
+      return updated ?? el;
+    });
+
+    api.updateScene({ elements: mergedElements });
 
     const al = api.getSceneElementsIncludingDeleted();
   };

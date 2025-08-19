@@ -31,6 +31,36 @@ import type { Scene } from "./Scene";
 import type { Bounds } from "./bounds";
 import type { ExcalidrawElement } from "./types";
 
+const collectRecursiveFrameChildren = (
+  frameIds: string[],
+  scene: Scene,
+  visited = new Set<string>(),
+): NonDeletedExcalidrawElement[] => {
+  const elementsToAdd: NonDeletedExcalidrawElement[] = [];
+
+  for (const element of scene.getNonDeletedElements()) {
+    if (
+      element.frameId &&
+      frameIds.includes(element.frameId) &&
+      !visited.has(element.id)
+    ) {
+      visited.add(element.id);
+      elementsToAdd.push(element);
+
+      if (isFrameLikeElement(element)) {
+        const recursiveChildren = collectRecursiveFrameChildren(
+          [element.id],
+          scene,
+          visited,
+        );
+        elementsToAdd.push(...recursiveChildren);
+      }
+    }
+  }
+
+  return elementsToAdd;
+};
+
 export const dragSelectedElements = (
   pointerDownState: PointerDownState,
   _selectedElements: NonDeletedExcalidrawElement[],
@@ -76,10 +106,9 @@ export const dragSelectedElements = (
     .map((f) => f.id);
 
   if (frames.length > 0) {
-    for (const element of scene.getNonDeletedElements()) {
-      if (element.frameId !== null && frames.includes(element.frameId)) {
-        elementsToUpdate.add(element);
-      }
+    const recursiveChildren = collectRecursiveFrameChildren(frames, scene);
+    for (const el of recursiveChildren) {
+      elementsToUpdate.add(el);
     }
   }
 
