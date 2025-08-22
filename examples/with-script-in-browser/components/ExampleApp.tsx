@@ -16,18 +16,18 @@ import type {
 } from "@excalidraw/excalidraw/element/types";
 import type {
   AppState,
-  BinaryFileData,
   ExcalidrawImperativeAPI,
   ExcalidrawInitialDataState,
   PointerDownState as ExcalidrawPointerDownState,
   Gesture,
   LibraryItems,
 } from "@excalidraw/excalidraw/types";
-
+// IMPORTANT: use the SAME path you used where LocalData.save() worked (your App.tsx):
 import initialData from "../initialData";
 import {
   distance2d,
   fileOpen,
+  ResolvablePromise,
   resolvablePromise,
   withBatchedUpdates,
   withBatchedUpdatesThrottled,
@@ -39,7 +39,6 @@ import ExampleSidebar from "./sidebar/ExampleSidebar";
 
 import "./ExampleApp.scss";
 
-import type { ResolvablePromise } from "../utils";
 import { ExpandableFrameOverlay } from "./ExpandableFrameOverlay";
 import { FactsPanel } from "./FactsPanel";
 import { SidebarStack } from "./SidebarStack";
@@ -68,6 +67,7 @@ type PointerDownState = {
 const COMMENT_ICON_DIMENSION = 32;
 const COMMENT_INPUT_HEIGHT = 50;
 const COMMENT_INPUT_WIDTH = 150;
+
 export interface AppProps {
   appTitle: string;
   useCustom: (api: ExcalidrawImperativeAPI | null, customArgs?: any[]) => void;
@@ -128,14 +128,6 @@ export default function ExampleApp({
     return true;
   };
 
-  const initialStatePromiseRef = useRef<{
-    promise: ResolvablePromise<ExcalidrawInitialDataState | null>;
-  }>({ promise: null! });
-  if (!initialStatePromiseRef.current.promise) {
-    initialStatePromiseRef.current.promise =
-      resolvablePromise<ExcalidrawInitialDataState | null>();
-  }
-
   const [excalidrawAPI, setExcalidrawAPI] =
     useState<ExcalidrawImperativeAPI | null>(null);
 
@@ -143,37 +135,33 @@ export default function ExampleApp({
 
   useHandleLibrary({ excalidrawAPI });
 
+  const initialDataRef = useRef<
+    ResolvablePromise<ExcalidrawInitialDataState | null>
+  >(resolvablePromise<ExcalidrawInitialDataState | null>());
+
+  // Load saved scene into initial state before Excalidraw mounts
   useEffect(() => {
-    if (!excalidrawAPI) {
-      return;
-    }
-    const fetchData = async () => {
-      const res = await fetch("/images/rocket.jpeg");
-      const imageData = await res.blob();
-      const reader = new FileReader();
-      reader.readAsDataURL(imageData);
+    let cancelled = false;
 
-      reader.onload = function () {
-        const imagesArray: BinaryFileData[] = [
-          {
-            id: "rocket" as BinaryFileData["id"],
-            dataURL: reader.result as BinaryFileData["dataURL"],
-            mimeType: MIME_TYPES.jpg,
-            created: 1644915140367,
-            lastRetrieved: 1644915140367,
-          },
-        ];
-
-        //@ts-ignore
-        initialStatePromiseRef.current.promise.resolve({
-          ...initialData,
-          elements: convertToExcalidrawElements(initialData.elements),
+    (async () => {
+      if (!excalidrawAPI) return; // wait until API exists if initializeScene needs it
+      try {
+        const { scene } = await initializeScene({
+          collabAPI: null, // or your real collabAPI
+          excalidrawAPI,
         });
-        excalidrawAPI.addFiles(imagesArray);
-      };
+        if (!cancelled) {
+          initialDataRef.current.resolve(scene ?? null);
+        }
+      } catch {
+        if (!cancelled) initialDataRef.current.resolve(null);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
     };
-    fetchData();
-  }, [excalidrawAPI, convertToExcalidrawElements, MIME_TYPES]);
+  }, [excalidrawAPI]);
 
   const renderExcalidraw = (children: React.ReactNode) => {
     const Excalidraw: any = Children.toArray(children).find(
@@ -190,11 +178,19 @@ export default function ExampleApp({
       Excalidraw,
       {
         excalidrawAPI: (api: ExcalidrawImperativeAPI) => setExcalidrawAPI(api),
-        initialData: initialStatePromiseRef.current.promise,
+        initialData: initialDataRef.current, // ✅ pass the promise itself
         onChange: (
           elements: NonDeletedExcalidrawElement[],
           state: AppState,
-        ) => {},
+        ) => {
+          const scene = {
+            elements,
+            appState: {
+              ...state,
+              collaborators: undefined, // avoid circular ref
+            },
+          };
+        },
         onPointerUpdate: (payload: {
           pointer: { x: number; y: number };
           button: "down" | "up";

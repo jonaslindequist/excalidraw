@@ -1,0 +1,104 @@
+.facts-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  font-size: 12px;
+}
+
+.facts-head {
+  padding: 8px;
+  border-bottom: 1px solid var(--divider, #e5e7eb);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.facts-head .muted {
+  opacity: 0.7;
+}
+
+.facts-body {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.facts-label {
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+.facts-input {
+  width: 100%;
+  height: 26px;
+  border: 1px solid var(--divider, #e5e7eb);
+  border-radius: 6px;
+  padding: 4px 6px;
+  background: transparent;
+  color: inherit;
+}
+.facts-input:focus {
+  outline: 1px solid #94a3b8;
+}
+
+.facts-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.facts-fields {
+  display: grid;
+  gap: 6px;
+}
+
+.facts-tags .tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.facts-tags .tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--divider, #e5e7eb);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+.facts-tags .row {
+  display: flex;
+  gap: 6px;
+}
+.facts-tags .row > button {
+  height: 28px;
+  padding: 0 10px;
+}
+
+.facts-rel {
+  margin-top: 6px;
+}
+.facts-rel summary {
+  cursor: pointer;
+  margin-bottom: 6px;
+}
+.facts-rel-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.facts-footer {
+  margin-top: auto;
+  display: flex;
+  justify-content: space-between;
+}
+.facts-footer .danger {
+  border: 1px solid #ef4444;
+  color: #ef4444;
+  background: transparent;
+  padding: 4px 8px;
+  border-radius: 6px;
+  height: 28px;
+  cursor: pointer;
+}

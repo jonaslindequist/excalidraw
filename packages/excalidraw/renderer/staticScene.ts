@@ -238,9 +238,6 @@ const _renderStaticScene = ({
     viewBackgroundColor: appState.viewBackgroundColor,
   });
 
-  const filteredVisibleElements = visibleElements.filter(
-    (el) => el.customData?.isVisible !== false,
-  );
   // Apply zoom
   context.scale(appState.zoom.value, appState.zoom.value);
 
@@ -260,7 +257,7 @@ const _renderStaticScene = ({
 
   const groupsToBeAddedToFrame = new Set<string>();
 
-  filteredVisibleElements.forEach((element) => {
+  visibleElements.forEach((element) => {
     if (
       element.groupIds.length > 0 &&
       appState.frameToHighlight &&
@@ -281,7 +278,7 @@ const _renderStaticScene = ({
   const inFrameGroupsMap = new Map<string, boolean>();
 
   // Paint visible elements
-  filteredVisibleElements
+  visibleElements
     .filter((el) => !isIframeLikeElement(el))
     .forEach((element) => {
       try {
@@ -368,7 +365,7 @@ const _renderStaticScene = ({
     });
 
   // render embeddables on top
-  filteredVisibleElements
+  visibleElements
     .filter(
       (el) =>
         el.customData?.isVisible !== false && // 👈 skip hidden elements

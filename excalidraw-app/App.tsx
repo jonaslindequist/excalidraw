@@ -1,9 +1,25 @@
 import {
+  APP_NAME,
+  debounce,
+  EVENT,
+  getFrame,
+  getVersion,
+  isDevEnv,
+  isRunningInIframe,
+  isTestEnv,
+  preventUnload,
+  resolvablePromise,
+  THEME,
+  TITLE_TIMEOUT,
+  VERSION_TIMEOUT,
+} from "@excalidraw/common";
+import {
+  CaptureUpdateAction,
   Excalidraw,
   LiveCollaborationTrigger,
-  TTDDialogTrigger,
-  CaptureUpdateAction,
   reconcileElements,
+  Sidebar,
+  TTDDialogTrigger,
 } from "@excalidraw/excalidraw";
 import { trackEvent } from "@excalidraw/excalidraw/analytics";
 import { getDefaultAppState } from "@excalidraw/excalidraw/appState";
@@ -16,71 +32,57 @@ import { OverwriteConfirmDialog } from "@excalidraw/excalidraw/components/Overwr
 import { openConfirmModal } from "@excalidraw/excalidraw/components/OverwriteConfirm/OverwriteConfirmState";
 import { ShareableLinkDialog } from "@excalidraw/excalidraw/components/ShareableLinkDialog";
 import Trans from "@excalidraw/excalidraw/components/Trans";
-import {
-  APP_NAME,
-  EVENT,
-  THEME,
-  TITLE_TIMEOUT,
-  VERSION_TIMEOUT,
-  debounce,
-  getVersion,
-  getFrame,
-  isTestEnv,
-  preventUnload,
-  resolvablePromise,
-  isRunningInIframe,
-  isDevEnv,
-} from "@excalidraw/common";
-import polyfill from "@excalidraw/excalidraw/polyfill";
-import { useCallback, useEffect, useRef, useState } from "react";
 import { loadFromBlob } from "@excalidraw/excalidraw/data/blob";
 import { useCallbackRefState } from "@excalidraw/excalidraw/hooks/useCallbackRefState";
 import { t } from "@excalidraw/excalidraw/i18n";
+import polyfill from "@excalidraw/excalidraw/polyfill";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
-  GithubIcon,
-  XBrandIcon,
+  isElementLink,
+  isInitializedImageElement,
+  newElementWith,
+} from "@excalidraw/element";
+import {
   DiscordIcon,
   ExcalLogo,
-  usersIcon,
   exportToPlus,
+  GithubIcon,
   share,
+  usersIcon,
+  XBrandIcon,
   youtubeIcon,
 } from "@excalidraw/excalidraw/components/icons";
-import { isElementLink } from "@excalidraw/element";
-import { restore, restoreAppState } from "@excalidraw/excalidraw/data/restore";
-import { newElementWith } from "@excalidraw/element";
-import { isInitializedImageElement } from "@excalidraw/element";
-import clsx from "clsx";
 import {
   parseLibraryTokensFromUrl,
   useHandleLibrary,
 } from "@excalidraw/excalidraw/data/library";
+import { restore, restoreAppState } from "@excalidraw/excalidraw/data/restore";
+import clsx from "clsx";
 
-import type { RemoteExcalidrawElement } from "@excalidraw/excalidraw/data/reconcile";
-import type { RestoredDataState } from "@excalidraw/excalidraw/data/restore";
+import type { ResolutionType } from "@excalidraw/common/utility-types";
+import type { ResolvablePromise } from "@excalidraw/common/utils";
 import type {
   FileId,
   NonDeletedExcalidrawElement,
   OrderedExcalidrawElement,
 } from "@excalidraw/element/types";
+import type { RemoteExcalidrawElement } from "@excalidraw/excalidraw/data/reconcile";
+import type { RestoredDataState } from "@excalidraw/excalidraw/data/restore";
 import type {
   AppState,
-  ExcalidrawImperativeAPI,
   BinaryFiles,
+  ExcalidrawImperativeAPI,
   ExcalidrawInitialDataState,
   UIAppState,
 } from "@excalidraw/excalidraw/types";
-import type { ResolutionType } from "@excalidraw/common/utility-types";
-import type { ResolvablePromise } from "@excalidraw/common/utils";
 
-import CustomStats from "./CustomStats";
 import {
+  appJotaiStore,
   Provider,
   useAtom,
   useAtomValue,
   useAtomWithInitialValue,
-  appJotaiStore,
 } from "./app-jotai";
 import {
   FIREBASE_STORAGE_PREFIXES,
@@ -101,6 +103,7 @@ import {
   exportToExcalidrawPlus,
 } from "./components/ExportToExcalidrawPlus";
 import { TopErrorBoundary } from "./components/TopErrorBoundary";
+import CustomStats from "./CustomStats";
 
 import {
   exportToBackend,
@@ -115,6 +118,15 @@ import {
   importUsernameFromLocalStorage,
 } from "./data/localStorage";
 
+import { getPreferredLanguage } from "./app-language/language-detector";
+import { useAppLangCode } from "./app-language/language-state";
+import CollabError, { collabErrorIndicatorAtom } from "./collab/CollabError";
+import { AIComponents } from "./components/AI";
+import DebugCanvas, {
+  debugRenderer,
+  isVisualDebuggerEnabled,
+  loadSavedDebugState,
+} from "./components/DebugCanvas";
 import { loadFilesFromFirebase } from "./data/firebase";
 import {
   LibraryIndexedDBAdapter,
@@ -122,22 +134,18 @@ import {
   LocalData,
 } from "./data/LocalData";
 import { isBrowserStorageStateNewer } from "./data/tabSync";
-import { ShareDialog, shareDialogStateAtom } from "./share/ShareDialog";
-import CollabError, { collabErrorIndicatorAtom } from "./collab/CollabError";
-import { useHandleAppTheme } from "./useHandleAppTheme";
-import { getPreferredLanguage } from "./app-language/language-detector";
-import { useAppLangCode } from "./app-language/language-state";
-import DebugCanvas, {
-  debugRenderer,
-  isVisualDebuggerEnabled,
-  loadSavedDebugState,
-} from "./components/DebugCanvas";
-import { AIComponents } from "./components/AI";
 import { ExcalidrawPlusIframeExport } from "./ExcalidrawPlusIframeExport";
+import { ShareDialog, shareDialogStateAtom } from "./share/ShareDialog";
+import { useHandleAppTheme } from "./useHandleAppTheme";
 
 import "./index.scss";
 
 import type { CollabAPI } from "./collab/Collab";
+import { DockLayout } from "./custom/dock/DockLayout";
+import { AddExpandableFrameButton } from "./custom/expandable-frames";
+import { mountExpandableFramesOverlay } from "./custom/expandable-frames/imperativeOverlay";
+import { FactsPanel } from "./custom/facts/FactsPanel";
+import { LayersPanel } from "./custom/layers/LayersPanel";
 
 polyfill();
 
@@ -342,6 +350,8 @@ const ExcalidrawWrapper = () => {
 
   const [langCode, setLangCode] = useAppLangCode();
 
+  const overlayRootRef = useRef<HTMLDivElement>(null);
+
   // initial state
   // ---------------------------------------------------------------------------
 
@@ -354,6 +364,8 @@ const ExcalidrawWrapper = () => {
   }
 
   const debugCanvasRef = useRef<HTMLCanvasElement>(null);
+
+  const centerElRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     trackEvent("load", "frame", getFrame());
@@ -382,6 +394,10 @@ const ExcalidrawWrapper = () => {
 
   const [, forceRefresh] = useState(false);
 
+  const overlayRef = useRef<ReturnType<
+    typeof mountExpandableFramesOverlay
+  > | null>(null);
+
   useEffect(() => {
     if (isDevEnv()) {
       const debugState = loadSavedDebugState();
@@ -395,6 +411,16 @@ const ExcalidrawWrapper = () => {
       }
       forceRefresh((prev) => !prev);
     }
+    if (!excalidrawAPI || !overlayRootRef.current) return;
+  }, [excalidrawAPI]);
+
+  useEffect(() => {
+    if (!excalidrawAPI || !centerElRef.current) return;
+    overlayRef.current?.dispose?.();
+    overlayRef.current = mountExpandableFramesOverlay(excalidrawAPI, {
+      container: centerElRef.current,
+    });
+    return () => overlayRef.current?.dispose?.();
   }, [excalidrawAPI]);
 
   useEffect(() => {
@@ -632,6 +658,8 @@ const ExcalidrawWrapper = () => {
       collabAPI.syncElements(elements);
     }
 
+    overlayRootRef.current?.dispatchEvent(new CustomEvent("exca:scene"));
+
     // this check is redundant, but since this is a hot path, it's best
     // not to evaludate the nested expression every time
     if (!LocalData.isSavePaused()) {
@@ -804,345 +832,414 @@ const ExcalidrawWrapper = () => {
         "is-collaborating": isCollaborating,
       })}
     >
-      <Excalidraw
-        excalidrawAPI={excalidrawRefCallback}
-        onChange={onChange}
-        initialData={initialStatePromiseRef.current.promise}
-        isCollaborating={isCollaborating}
-        onPointerUpdate={collabAPI?.onPointerUpdate}
-        UIOptions={{
-          canvasActions: {
-            toggleTheme: true,
-            export: {
-              onExportToBackend,
-              renderCustomUI: excalidrawAPI
-                ? (elements, appState, files) => {
-                    return (
-                      <ExportToExcalidrawPlus
-                        elements={elements}
-                        appState={appState}
-                        files={files}
-                        name={excalidrawAPI.getName()}
-                        onError={(error) => {
-                          excalidrawAPI?.updateScene({
-                            appState: {
-                              errorMessage: error.message,
-                            },
-                          });
-                        }}
-                        onSuccess={() => {
-                          excalidrawAPI.updateScene({
-                            appState: { openDialog: null },
-                          });
-                        }}
-                      />
-                    );
-                  }
-                : undefined,
-            },
-          },
-        }}
-        langCode={langCode}
-        renderCustomStats={renderCustomStats}
-        detectScroll={false}
-        handleKeyboardGlobally={true}
-        autoFocus={true}
-        theme={editorTheme}
-        renderTopRightUI={(isMobile) => {
-          if (isMobile || !collabAPI || isCollabDisabled) {
-            return null;
-          }
-          return (
-            <div className="top-right-ui">
-              {collabError.message && <CollabError collabError={collabError} />}
-              <LiveCollaborationTrigger
-                isCollaborating={isCollaborating}
-                onSelect={() =>
-                  setShareDialogState({ isOpen: true, type: "share" })
-                }
-              />
-            </div>
-          );
-        }}
-        onLinkOpen={(element, event) => {
-          if (element.link && isElementLink(element.link)) {
-            event.preventDefault();
-            excalidrawAPI?.scrollToContent(element.link, { animate: true });
-          }
-        }}
+      <DockLayout
+        excalidrawAPI={excalidrawAPI}
+        overlayEventTarget={overlayRootRef.current}
+        factsNamespace="default-scene"
+        defaultLeftWidth={280}
+        defaultRightWidth={320}
+        onCenterReady={(el) => (centerElRef.current = el)} // <— get center div
       >
-        <AppMainMenu
-          onCollabDialogOpen={onCollabDialogOpen}
+        <Excalidraw
+          excalidrawAPI={excalidrawRefCallback}
+          onChange={onChange}
+          onScrollChange={() => {
+            overlayRef.current?.root?.dispatchEvent(
+              new CustomEvent("exca:camera"),
+            );
+            return true;
+          }}
+          initialData={initialStatePromiseRef.current.promise}
           isCollaborating={isCollaborating}
-          isCollabEnabled={!isCollabDisabled}
-          theme={appTheme}
-          setTheme={(theme) => setAppTheme(theme)}
-          refresh={() => forceRefresh((prev) => !prev)}
-        />
-        <AppWelcomeScreen
-          onCollabDialogOpen={onCollabDialogOpen}
-          isCollabEnabled={!isCollabDisabled}
-        />
-        <OverwriteConfirmDialog>
-          <OverwriteConfirmDialog.Actions.ExportToImage />
-          <OverwriteConfirmDialog.Actions.SaveToDisk />
-          {excalidrawAPI && (
-            <OverwriteConfirmDialog.Action
-              title={t("overwriteConfirm.action.excalidrawPlus.title")}
-              actionLabel={t("overwriteConfirm.action.excalidrawPlus.button")}
-              onClick={() => {
-                exportToExcalidrawPlus(
-                  excalidrawAPI.getSceneElements(),
-                  excalidrawAPI.getAppState(),
-                  excalidrawAPI.getFiles(),
-                  excalidrawAPI.getName(),
-                );
-              }}
-            >
-              {t("overwriteConfirm.action.excalidrawPlus.description")}
-            </OverwriteConfirmDialog.Action>
-          )}
-        </OverwriteConfirmDialog>
-        <AppFooter onChange={() => excalidrawAPI?.refresh()} />
-        {excalidrawAPI && <AIComponents excalidrawAPI={excalidrawAPI} />}
-
-        <TTDDialogTrigger />
-        {isCollaborating && isOffline && (
-          <div className="collab-offline-warning">
-            {t("alerts.collabOfflineWarning")}
-          </div>
-        )}
-        {latestShareableLink && (
-          <ShareableLinkDialog
-            link={latestShareableLink}
-            onCloseRequest={() => setLatestShareableLink(null)}
-            setErrorMessage={setErrorMessage}
-          />
-        )}
-        {excalidrawAPI && !isCollabDisabled && (
-          <Collab excalidrawAPI={excalidrawAPI} />
-        )}
-
-        <ShareDialog
-          collabAPI={collabAPI}
-          onExportToBackend={async () => {
-            if (excalidrawAPI) {
-              try {
-                await onExportToBackend(
-                  excalidrawAPI.getSceneElements(),
-                  excalidrawAPI.getAppState(),
-                  excalidrawAPI.getFiles(),
-                );
-              } catch (error: any) {
-                setErrorMessage(error.message);
-              }
+          onPointerUpdate={collabAPI?.onPointerUpdate}
+          UIOptions={{
+            canvasActions: {
+              toggleTheme: true,
+              export: {
+                onExportToBackend,
+                renderCustomUI: excalidrawAPI
+                  ? (elements, appState, files) => {
+                      return (
+                        <ExportToExcalidrawPlus
+                          elements={elements}
+                          appState={appState}
+                          files={files}
+                          name={excalidrawAPI.getName()}
+                          onError={(error) => {
+                            excalidrawAPI?.updateScene({
+                              appState: {
+                                errorMessage: error.message,
+                              },
+                            });
+                          }}
+                          onSuccess={() => {
+                            excalidrawAPI.updateScene({
+                              appState: { openDialog: null },
+                            });
+                          }}
+                        />
+                      );
+                    }
+                  : undefined,
+              },
+            },
+          }}
+          langCode={langCode}
+          renderCustomStats={renderCustomStats}
+          detectScroll={false}
+          handleKeyboardGlobally={false}
+          autoFocus={true}
+          theme={editorTheme}
+          renderTopRightUI={(isMobile) => {
+            if (isMobile || !collabAPI || isCollabDisabled) {
+              return null;
+            }
+            return (
+              <div className="top-right-ui">
+                {collabError.message && (
+                  <CollabError collabError={collabError} />
+                )}
+                <LiveCollaborationTrigger
+                  isCollaborating={isCollaborating}
+                  onSelect={() =>
+                    setShareDialogState({ isOpen: true, type: "share" })
+                  }
+                />
+                <AddExpandableFrameButton api={excalidrawAPI} />
+              </div>
+            );
+          }}
+          onLinkOpen={(element, event) => {
+            if (element.link && isElementLink(element.link)) {
+              event.preventDefault();
+              excalidrawAPI?.scrollToContent(element.link, { animate: true });
             }
           }}
-        />
+        >
+          <AppMainMenu
+            onCollabDialogOpen={onCollabDialogOpen}
+            isCollaborating={isCollaborating}
+            isCollabEnabled={!isCollabDisabled}
+            theme={appTheme}
+            setTheme={(theme) => setAppTheme(theme)}
+            refresh={() => forceRefresh((prev) => !prev)}
+          />
+          <AppWelcomeScreen
+            onCollabDialogOpen={onCollabDialogOpen}
+            isCollabEnabled={!isCollabDisabled}
+          />
 
-        {errorMessage && (
-          <ErrorDialog onClose={() => setErrorMessage("")}>
-            {errorMessage}
-          </ErrorDialog>
-        )}
-
-        <CommandPalette
-          customCommandPaletteItems={[
-            {
-              label: t("labels.liveCollaboration"),
-              category: DEFAULT_CATEGORIES.app,
-              keywords: [
-                "team",
-                "multiplayer",
-                "share",
-                "public",
-                "session",
-                "invite",
-              ],
-              icon: usersIcon,
-              perform: () => {
-                setShareDialogState({
-                  isOpen: true,
-                  type: "collaborationOnly",
-                });
-              },
-            },
-            {
-              label: t("roomDialog.button_stopSession"),
-              category: DEFAULT_CATEGORIES.app,
-              predicate: () => !!collabAPI?.isCollaborating(),
-              keywords: [
-                "stop",
-                "session",
-                "end",
-                "leave",
-                "close",
-                "exit",
-                "collaboration",
-              ],
-              perform: () => {
-                if (collabAPI) {
-                  collabAPI.stopCollaboration();
-                  if (!collabAPI.isCollaborating()) {
-                    setShareDialogState({ isOpen: false });
-                  }
-                }
-              },
-            },
-            {
-              label: t("labels.share"),
-              category: DEFAULT_CATEGORIES.app,
-              predicate: true,
-              icon: share,
-              keywords: [
-                "link",
-                "shareable",
-                "readonly",
-                "export",
-                "publish",
-                "snapshot",
-                "url",
-                "collaborate",
-                "invite",
-              ],
-              perform: async () => {
-                setShareDialogState({ isOpen: true, type: "share" });
-              },
-            },
-            {
-              label: "GitHub",
-              icon: GithubIcon,
-              category: DEFAULT_CATEGORIES.links,
-              predicate: true,
-              keywords: [
-                "issues",
-                "bugs",
-                "requests",
-                "report",
-                "features",
-                "social",
-                "community",
-              ],
-              perform: () => {
-                window.open(
-                  "https://github.com/excalidraw/excalidraw",
-                  "_blank",
-                  "noopener noreferrer",
-                );
-              },
-            },
-            {
-              label: t("labels.followUs"),
-              icon: XBrandIcon,
-              category: DEFAULT_CATEGORIES.links,
-              predicate: true,
-              keywords: ["twitter", "contact", "social", "community"],
-              perform: () => {
-                window.open(
-                  "https://x.com/excalidraw",
-                  "_blank",
-                  "noopener noreferrer",
-                );
-              },
-            },
-            {
-              label: t("labels.discordChat"),
-              category: DEFAULT_CATEGORIES.links,
-              predicate: true,
-              icon: DiscordIcon,
-              keywords: [
-                "chat",
-                "talk",
-                "contact",
-                "bugs",
-                "requests",
-                "report",
-                "feedback",
-                "suggestions",
-                "social",
-                "community",
-              ],
-              perform: () => {
-                window.open(
-                  "https://discord.gg/UexuTaE",
-                  "_blank",
-                  "noopener noreferrer",
-                );
-              },
-            },
-            {
-              label: "YouTube",
-              icon: youtubeIcon,
-              category: DEFAULT_CATEGORIES.links,
-              predicate: true,
-              keywords: ["features", "tutorials", "howto", "help", "community"],
-              perform: () => {
-                window.open(
-                  "https://youtube.com/@excalidraw",
-                  "_blank",
-                  "noopener noreferrer",
-                );
-              },
-            },
-            ...(isExcalidrawPlusSignedUser
-              ? [
-                  {
-                    ...ExcalidrawPlusAppCommand,
-                    label: "Sign in / Go to Excalidraw+",
-                  },
-                ]
-              : [ExcalidrawPlusCommand, ExcalidrawPlusAppCommand]),
-
-            {
-              label: t("overwriteConfirm.action.excalidrawPlus.button"),
-              category: DEFAULT_CATEGORIES.export,
-              icon: exportToPlus,
-              predicate: true,
-              keywords: ["plus", "export", "save", "backup"],
-              perform: () => {
-                if (excalidrawAPI) {
+          <OverwriteConfirmDialog>
+            <OverwriteConfirmDialog.Actions.ExportToImage />
+            <OverwriteConfirmDialog.Actions.SaveToDisk />
+            {excalidrawAPI && (
+              <OverwriteConfirmDialog.Action
+                title={t("overwriteConfirm.action.excalidrawPlus.title")}
+                actionLabel={t("overwriteConfirm.action.excalidrawPlus.button")}
+                onClick={() => {
                   exportToExcalidrawPlus(
                     excalidrawAPI.getSceneElements(),
                     excalidrawAPI.getAppState(),
                     excalidrawAPI.getFiles(),
                     excalidrawAPI.getName(),
                   );
+                }}
+              >
+                {t("overwriteConfirm.action.excalidrawPlus.description")}
+              </OverwriteConfirmDialog.Action>
+            )}
+          </OverwriteConfirmDialog>
+          <AppFooter onChange={() => excalidrawAPI?.refresh()} />
+          {excalidrawAPI && <AIComponents excalidrawAPI={excalidrawAPI} />}
+
+          <TTDDialogTrigger />
+          {isCollaborating && isOffline && (
+            <div className="collab-offline-warning">
+              {t("alerts.collabOfflineWarning")}
+            </div>
+          )}
+          {latestShareableLink && (
+            <ShareableLinkDialog
+              link={latestShareableLink}
+              onCloseRequest={() => setLatestShareableLink(null)}
+              setErrorMessage={setErrorMessage}
+            />
+          )}
+          {excalidrawAPI && !isCollabDisabled && (
+            <Collab excalidrawAPI={excalidrawAPI} />
+          )}
+
+          <ShareDialog
+            collabAPI={collabAPI}
+            onExportToBackend={async () => {
+              if (excalidrawAPI) {
+                try {
+                  await onExportToBackend(
+                    excalidrawAPI.getSceneElements(),
+                    excalidrawAPI.getAppState(),
+                    excalidrawAPI.getFiles(),
+                  );
+                } catch (error: any) {
+                  setErrorMessage(error.message);
                 }
-              },
-            },
-            {
-              ...CommandPalette.defaultItems.toggleTheme,
-              perform: () => {
-                setAppTheme(
-                  editorTheme === THEME.DARK ? THEME.LIGHT : THEME.DARK,
-                );
-              },
-            },
-            {
-              label: t("labels.installPWA"),
-              category: DEFAULT_CATEGORIES.app,
-              predicate: () => !!pwaEvent,
-              perform: () => {
-                if (pwaEvent) {
-                  pwaEvent.prompt();
-                  pwaEvent.userChoice.then(() => {
-                    // event cannot be reused, but we'll hopefully
-                    // grab new one as the event should be fired again
-                    pwaEvent = null;
-                  });
-                }
-              },
-            },
-          ]}
-        />
-        {isVisualDebuggerEnabled() && excalidrawAPI && (
-          <DebugCanvas
-            appState={excalidrawAPI.getAppState()}
-            scale={window.devicePixelRatio}
-            ref={debugCanvasRef}
+              }
+            }}
           />
-        )}
-      </Excalidraw>
+
+          {errorMessage && (
+            <ErrorDialog onClose={() => setErrorMessage("")}>
+              {errorMessage}
+            </ErrorDialog>
+          )}
+
+          <CommandPalette
+            customCommandPaletteItems={[
+              {
+                label: t("labels.liveCollaboration"),
+                category: DEFAULT_CATEGORIES.app,
+                keywords: [
+                  "team",
+                  "multiplayer",
+                  "share",
+                  "public",
+                  "session",
+                  "invite",
+                ],
+                icon: usersIcon,
+                perform: () => {
+                  setShareDialogState({
+                    isOpen: true,
+                    type: "collaborationOnly",
+                  });
+                },
+              },
+              {
+                label: t("roomDialog.button_stopSession"),
+                category: DEFAULT_CATEGORIES.app,
+                predicate: () => !!collabAPI?.isCollaborating(),
+                keywords: [
+                  "stop",
+                  "session",
+                  "end",
+                  "leave",
+                  "close",
+                  "exit",
+                  "collaboration",
+                ],
+                perform: () => {
+                  if (collabAPI) {
+                    collabAPI.stopCollaboration();
+                    if (!collabAPI.isCollaborating()) {
+                      setShareDialogState({ isOpen: false });
+                    }
+                  }
+                },
+              },
+              {
+                label: t("labels.share"),
+                category: DEFAULT_CATEGORIES.app,
+                predicate: true,
+                icon: share,
+                keywords: [
+                  "link",
+                  "shareable",
+                  "readonly",
+                  "export",
+                  "publish",
+                  "snapshot",
+                  "url",
+                  "collaborate",
+                  "invite",
+                ],
+                perform: async () => {
+                  setShareDialogState({ isOpen: true, type: "share" });
+                },
+              },
+              {
+                label: "GitHub",
+                icon: GithubIcon,
+                category: DEFAULT_CATEGORIES.links,
+                predicate: true,
+                keywords: [
+                  "issues",
+                  "bugs",
+                  "requests",
+                  "report",
+                  "features",
+                  "social",
+                  "community",
+                ],
+                perform: () => {
+                  window.open(
+                    "https://github.com/excalidraw/excalidraw",
+                    "_blank",
+                    "noopener noreferrer",
+                  );
+                },
+              },
+              {
+                label: t("labels.followUs"),
+                icon: XBrandIcon,
+                category: DEFAULT_CATEGORIES.links,
+                predicate: true,
+                keywords: ["twitter", "contact", "social", "community"],
+                perform: () => {
+                  window.open(
+                    "https://x.com/excalidraw",
+                    "_blank",
+                    "noopener noreferrer",
+                  );
+                },
+              },
+              {
+                label: t("labels.discordChat"),
+                category: DEFAULT_CATEGORIES.links,
+                predicate: true,
+                icon: DiscordIcon,
+                keywords: [
+                  "chat",
+                  "talk",
+                  "contact",
+                  "bugs",
+                  "requests",
+                  "report",
+                  "feedback",
+                  "suggestions",
+                  "social",
+                  "community",
+                ],
+                perform: () => {
+                  window.open(
+                    "https://discord.gg/UexuTaE",
+                    "_blank",
+                    "noopener noreferrer",
+                  );
+                },
+              },
+              {
+                label: "YouTube",
+                icon: youtubeIcon,
+                category: DEFAULT_CATEGORIES.links,
+                predicate: true,
+                keywords: [
+                  "features",
+                  "tutorials",
+                  "howto",
+                  "help",
+                  "community",
+                ],
+                perform: () => {
+                  window.open(
+                    "https://youtube.com/@excalidraw",
+                    "_blank",
+                    "noopener noreferrer",
+                  );
+                },
+              },
+              ...(isExcalidrawPlusSignedUser
+                ? [
+                    {
+                      ...ExcalidrawPlusAppCommand,
+                      label: "Sign in / Go to Excalidraw+",
+                    },
+                  ]
+                : [ExcalidrawPlusCommand, ExcalidrawPlusAppCommand]),
+
+              {
+                label: t("overwriteConfirm.action.excalidrawPlus.button"),
+                category: DEFAULT_CATEGORIES.export,
+                icon: exportToPlus,
+                predicate: true,
+                keywords: ["plus", "export", "save", "backup"],
+                perform: () => {
+                  if (excalidrawAPI) {
+                    exportToExcalidrawPlus(
+                      excalidrawAPI.getSceneElements(),
+                      excalidrawAPI.getAppState(),
+                      excalidrawAPI.getFiles(),
+                      excalidrawAPI.getName(),
+                    );
+                  }
+                },
+              },
+              {
+                ...CommandPalette.defaultItems.toggleTheme,
+                perform: () => {
+                  setAppTheme(
+                    editorTheme === THEME.DARK ? THEME.LIGHT : THEME.DARK,
+                  );
+                },
+              },
+              {
+                label: t("labels.installPWA"),
+                category: DEFAULT_CATEGORIES.app,
+                predicate: () => !!pwaEvent,
+                perform: () => {
+                  if (pwaEvent) {
+                    pwaEvent.prompt();
+                    pwaEvent.userChoice.then(() => {
+                      // event cannot be reused, but we'll hopefully
+                      // grab new one as the event should be fired again
+                      pwaEvent = null;
+                    });
+                  }
+                },
+              },
+            ]}
+          />
+          {isVisualDebuggerEnabled() && excalidrawAPI && (
+            <DebugCanvas
+              appState={excalidrawAPI.getAppState()}
+              scale={window.devicePixelRatio}
+              ref={debugCanvasRef}
+            />
+          )}
+          <Sidebar name="layers">
+            <Sidebar.Tabs>
+              <Sidebar.Header />
+              <Sidebar.Tab tab="tree">
+                {excalidrawAPI && (
+                  <LayersPanel
+                    api={excalidrawAPI}
+                    eventTarget={overlayRootRef.current}
+                  />
+                )}
+              </Sidebar.Tab>
+              <Sidebar.TabTriggers>
+                <Sidebar.TabTrigger tab="tree">Layers</Sidebar.TabTrigger>
+              </Sidebar.TabTriggers>
+              <Sidebar.Tab tab="facts">
+                {excalidrawAPI && (
+                  <FactsPanel
+                    api={excalidrawAPI}
+                    eventTarget={overlayRootRef.current}
+                    namespace="default-scene"
+                  />
+                )}
+              </Sidebar.Tab>
+              <Sidebar.TabTriggers>
+                <Sidebar.TabTrigger tab="facts">Facts</Sidebar.TabTrigger>
+              </Sidebar.TabTriggers>
+            </Sidebar.Tabs>
+          </Sidebar>
+          <Sidebar.Trigger
+            name="layers"
+            tab="tree"
+            style={{ position: "absolute", right: 12, bottom: 20, zIndex: 10 }}
+          >
+            Layers
+          </Sidebar.Trigger>
+          <div
+            ref={overlayRootRef}
+            style={{
+              position: "absolute",
+              inset: 0,
+              pointerEvents: "none",
+              zIndex: 2147483647,
+            }}
+          />
+        </Excalidraw>
+      </DockLayout>
     </div>
   );
 };

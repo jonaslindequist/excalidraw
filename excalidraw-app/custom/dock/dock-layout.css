@@ -1,0 +1,100 @@
+.dock-layout {
+  position: relative;
+  height: 100vh; /* or 100% of parent */
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto 6px 1fr 6px auto; /* left | handle | center | handle | right */
+  grid-template-rows: 100%;
+  overflow: hidden;
+}
+
+.dock-sidebar {
+  position: relative;
+  z-index: 30;
+} /* was none */
+.dock-handle {
+  z-index: 10;
+  position: relative;
+  background-color: rgb(145, 255, 0);
+} /* ensure below sidebar */
+.dock-center {
+  position: relative;
+  z-index: 0;
+  overflow: hidden;
+} /* editor layer */
+
+/* Sidebars */
+.dock-sidebar {
+  background: var(--panel-bg, #fff);
+  border-right: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  min-width: 0; /* allow collapse to 0 */
+}
+.dock-sidebar.right {
+  border-right: none;
+  border-left: 1px solid #e5e7eb;
+}
+
+/* Center editor container */
+.dock-center {
+  position: relative;
+  overflow: hidden; /* Excalidraw will stretch inside */
+  display: flex;
+}
+.dock-center > * {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Headers */
+.dock-header {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 12px;
+}
+.dock-btn {
+  margin-left: auto;
+  height: 24px;
+  width: 24px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+
+/* Drag handles */
+.dock-handle {
+  cursor: col-resize;
+  background: transparent;
+}
+.dock-handle.left:hover,
+.dock-handle.right:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+/* Rails (when collapsed) */
+.dock-rail {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 48px;
+  width: 24px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  z-index: 5;
+  opacity: 0.9;
+}
+.dock-rail.left {
+  left: 8px;
+}
+.dock-rail.right {
+  right: 8px;
+}
