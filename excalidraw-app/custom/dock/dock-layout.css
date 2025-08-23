@@ -19,9 +19,11 @@
 } /* ensure below sidebar */
 .dock-center {
   position: relative;
-  z-index: 0;
   overflow: hidden;
-} /* editor layer */
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
 
 /* Sidebars */
 .dock-sidebar {

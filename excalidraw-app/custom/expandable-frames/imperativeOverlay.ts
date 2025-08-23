@@ -227,116 +227,230 @@ export function mountExpandableFramesOverlay(
   api: ExcalidrawImperativeAPI,
   opts?: { container?: HTMLElement },
 ) {
-  const buttons = new Map<string, HTMLButtonElement>();
+  // one header <div> per frame id
+  const headers = new Map<string, HTMLDivElement>();
 
+  // overlay root inside the center container
   const overlayEl = document.createElement("div");
+  overlayEl.setAttribute("data-exca-overlay", "frames");
   Object.assign(overlayEl.style, {
     position: "absolute",
     inset: "0",
-    pointerEvents: "none", // root doesn’t eat clicks
+    pointerEvents: "none", // only children (headers) are interactive
     zIndex: "2147483647",
+    overflow: "hidden", // clip to center container
   } as CSSStyleDeclaration);
 
-  (
+  const container =
     opts?.container ??
     (document.querySelector(".dock-center") as HTMLElement) ??
-    document.body
-  ).appendChild(overlayEl);
+    document.body;
 
-  const root = overlayEl; // use this for events & children
+  container.appendChild(overlayEl);
+  const root = overlayEl;
+
+  // rAF-throttled render
+  let rafPending = false;
+  const schedule = () => {
+    if (rafPending) return;
+    rafPending = true;
+    requestAnimationFrame(() => {
+      rafPending = false;
+      render();
+    });
+  };
 
   const render = () => {
     const appState = api.getAppState();
     const elements = api.getSceneElements();
 
+    // center container rect to convert viewport->local
+    const rect = root.getBoundingClientRect();
+
+    // expandable frames only
     const frames = elements.filter(
       (el) =>
         el.type === "frame" && (el as any).customData?.expandable === true,
     ) as ExcalidrawFrameElement[];
 
-    // add/update buttons
+    // add/update headers
     for (const frame of frames) {
-      let btn = buttons.get(frame.id);
-      if (!btn) {
-        btn = document.createElement("button");
-        Object.assign(btn.style, {
+      let header = headers.get(frame.id);
+      if (!header) {
+        // build header container
+        header = document.createElement("div");
+        header.setAttribute("data-exca-frame-header", frame.id);
+        Object.assign(header.style, {
           position: "absolute",
-          width: "24px",
-          height: "24px",
-          pointerEvents: "auto", // clickable
-          border: "1px solid #ccc",
-          borderRadius: "12px",
-          background: "#fff",
-          boxShadow: "0 1px 4px rgba(0,0,0,.12)",
-          cursor: "pointer",
+          height: "22px",
+          pointerEvents: "auto",
+          display: "flex",
+          alignItems: "center",
+          gap: "6px",
+          padding: "0 8px",
+          borderRadius: "6px",
+          background: "rgba(255,255,255,0.9)",
+          backdropFilter: "blur(2px)",
+          border: "1px solid rgba(0,0,0,0.08)",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.12)",
+          font: "12px/1.2 system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
+          color: "#111",
           userSelect: "none",
-          zIndex: "2147483647",
-          display: "grid",
-          placeItems: "center",
-          transition: "opacity 120ms ease, transform 120ms ease",
+          WebkitUserSelect: "none",
+          touchAction: "manipulation",
+          // keep header visible even if frame is tiny
+          minWidth: "90px",
+          maxWidth: "320px",
+          overflow: "hidden",
+          whiteSpace: "nowrap",
         } as CSSStyleDeclaration);
 
-        btn.addEventListener("mousedown", (e) => e.stopPropagation());
-        btn.addEventListener("click", (ev) => {
-          const alt = (ev as MouseEvent).altKey;
+        // stop gestures escaping to canvas
+        header.addEventListener("mousedown", (e) => e.stopPropagation());
+        header.addEventListener("pointerdown", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        });
+
+        // chevron
+        const chev = document.createElement("button");
+        chev.type = "button";
+        Object.assign(chev.style, {
+          width: "18px",
+          height: "18px",
+          display: "grid",
+          placeItems: "center",
+          border: "1px solid rgba(0,0,0,0.12)",
+          borderRadius: "4px",
+          background: "#fff",
+          cursor: "pointer",
+        } as CSSStyleDeclaration);
+        chev.title = "Expand/Collapse (Alt: recursive)";
+        chev.addEventListener("pointerdown", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const alt = (e as unknown as PointerEvent).altKey;
           toggle(frame.id, alt);
         });
-        root.appendChild(btn);
-        buttons.set(frame.id, btn);
+
+        // type icon (simple frame glyph)
+        const icon = document.createElement("span");
+        icon.textContent = "▭"; // minimalist frame icon
+        Object.assign(icon.style, { opacity: "0.7" } as CSSStyleDeclaration);
+
+        // name label (click = select, double-click = scroll)
+        const label = document.createElement("div");
+        label.textContent = frame.name || frame.id;
+        Object.assign(label.style, {
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          flex: "1 1 auto",
+          cursor: "default",
+        } as CSSStyleDeclaration);
+        label.title = frame.name || frame.id;
+        label.addEventListener("pointerdown", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          // select on press
+          api.updateScene({
+            appState: { selectedElementIds: { [frame.id]: true } },
+          });
+        });
+        label.addEventListener("dblclick", () => {
+          api.scrollToContent(frame, { fitToContent: true, animate: true });
+        });
+
+        header.appendChild(chev);
+        header.appendChild(icon);
+        header.appendChild(label);
+
+        root.appendChild(header);
+        headers.set(frame.id, header);
       }
 
-      // position OUTSIDE right edge, vertically centered
-      const { x, y } = sceneCoordsToViewportCoords(
-        { sceneX: frame.x + frame.width, sceneY: frame.y + frame.height / 2 },
+      // keep label text current
+      const name = frame.name || frame.id;
+      const labelEl = header.querySelector("div");
+      if (labelEl && labelEl.textContent !== name) {
+        labelEl.textContent = name;
+        (labelEl as HTMLDivElement).title = name;
+      }
+
+      // scene -> viewport
+      const tl = sceneCoordsToViewportCoords(
+        { sceneX: frame.x, sceneY: frame.y },
         appState,
       );
-      btn.style.left = `${x + 8}px`;
-      btn.style.top = `${y - 12}px`;
+      // viewport -> center-local
+      const leftLocal = tl.x - rect.left;
+      const topLocal = tl.y - rect.top;
 
-      overlayEl.style.background = "rgba(255,0,0,.05)";
+      // header padding inside frame
+      const P_X = 8; // x padding
+      const P_Y = 6; // y padding
+      const headerWidth = Math.max(
+        90,
+        Math.min(Math.floor(frame.width - P_X * 2), 320),
+      );
 
+      header.style.left = `${leftLocal + P_X}px`;
+      header.style.top = `${topLocal + P_Y}px`;
+      header.style.width = `${Math.max(90, headerWidth)}px`;
+
+      // chevron state/tooltip
+      const chevBtn = header.querySelector("button")!;
       const collapsed = !!(frame as any).customData?.collapsed;
-      const isSelected = !!appState.selectedElementIds[frame.id];
-      btn.textContent = collapsed ? "▶" : "◀"; // side arrows
-      btn.title = collapsed
+      chevBtn.textContent = collapsed ? "▸" : "▾";
+      chevBtn.title = collapsed
         ? "Expand (Alt: recursive)"
         : "Collapse (Alt: recursive)";
-      btn.style.opacity = isSelected ? "1" : "0.15";
-      btn.style.pointerEvents = isSelected ? "auto" : "none";
+
+      // visibility/affordance based on selection
+      const isSelected = !!appState.selectedElementIds[frame.id];
+      header.style.opacity = isSelected ? "1" : "0.35";
+      // keep clickable even when not selected, but a bit subdued
+      header.style.pointerEvents = "auto";
     }
 
-    // remove buttons for frames no longer present
-    for (const [id, btn] of buttons) {
+    // remove headers for frames no longer present
+    for (const [id, el] of headers) {
       if (!frames.find((f) => f.id === id)) {
-        btn.remove();
-        buttons.delete(id);
+        el.remove();
+        headers.delete(id);
       }
     }
   };
 
   const toggle = (frameId: string, recursive = false) => {
     toggleFrameCollapsed(api, frameId, { recursive });
-    render();
+    schedule();
   };
 
-  // Keep hidden flags consistent on mount (import/collab)
-  reconcileHiddenByFrame(api, render);
+  // keep hidden flags consistent on mount (import/collab)
+  reconcileHiddenByFrame(api, schedule);
 
-  const onCamera = () => render();
-  const onScene = () => render();
+  const onCamera = () => schedule();
+  const onScene = () => schedule();
 
   root.addEventListener("exca:camera", onCamera as EventListener);
   root.addEventListener("exca:scene", onScene as EventListener);
 
+  // re-render when the center changes size (sidebars resize/toggle)
+  const ro = new ResizeObserver(() => schedule());
+  ro.observe(root);
+  if (container !== root) ro.observe(container);
+
+  // initial paint
   render();
 
   return {
     root, // dispatch CustomEvents to this (exca:scene / exca:camera)
     dispose: () => {
+      ro.disconnect();
       root.removeEventListener("exca:camera", onCamera as EventListener);
       root.removeEventListener("exca:scene", onScene as EventListener);
-      for (const [, btn] of buttons) btn.remove();
-      buttons.clear();
+      for (const [, el] of headers) el.remove();
+      headers.clear();
       root.remove();
     },
   };

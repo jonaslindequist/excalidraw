@@ -414,6 +414,9 @@ const ExcalidrawWrapper = () => {
     if (!excalidrawAPI || !overlayRootRef.current) return;
   }, [excalidrawAPI]);
 
+  const emitOverlay = (type: "exca:scene" | "exca:camera") =>
+    overlayRef.current?.root?.dispatchEvent(new CustomEvent(type));
+
   useEffect(() => {
     if (!excalidrawAPI || !centerElRef.current) return;
     overlayRef.current?.dispose?.();
@@ -692,6 +695,8 @@ const ExcalidrawWrapper = () => {
       });
     }
 
+    emitOverlay("exca:scene");
+
     // Render the debug scene if the debug canvas is available
     if (debugCanvasRef.current && excalidrawAPI) {
       debugRenderer(
@@ -851,7 +856,10 @@ const ExcalidrawWrapper = () => {
           }}
           initialData={initialStatePromiseRef.current.promise}
           isCollaborating={isCollaborating}
-          onPointerUpdate={collabAPI?.onPointerUpdate}
+          onPointerUpdate={(payload) => {
+            collabAPI?.onPointerUpdate?.(payload); // keep your collab handler
+            emitOverlay("exca:scene"); // ⬅ update header positions while dragging
+          }}
           UIOptions={{
             canvasActions: {
               toggleTheme: true,
