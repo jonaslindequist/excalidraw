@@ -146,6 +146,7 @@ import { AddExpandableFrameButton } from "./custom/expandable-frames";
 import { mountExpandableFramesOverlay } from "./custom/expandable-frames/imperativeOverlay";
 import { FactsPanel } from "./custom/facts/FactsPanel";
 import { LayersPanel } from "./custom/layers/LayersPanel";
+import { CommandBar } from "./custom/ui/commandBar";
 
 polyfill();
 
@@ -959,7 +960,7 @@ const ExcalidrawWrapper = () => {
           </OverwriteConfirmDialog>
           <AppFooter onChange={() => excalidrawAPI?.refresh()} />
           {excalidrawAPI && <AIComponents excalidrawAPI={excalidrawAPI} />}
-
+          {excalidrawAPI && <CommandBar api={excalidrawAPI} />}
           <TTDDialogTrigger />
           {isCollaborating && isOffline && (
             <div className="collab-offline-warning">

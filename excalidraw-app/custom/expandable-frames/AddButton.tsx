@@ -1,10 +1,11 @@
 import { newFrameElement } from "@excalidraw/element";
+import { viewportCoordsToSceneCoords } from "@excalidraw/excalidraw";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 
 export function AddExpandableFrameButton({
   api,
-  defaultWidth = 240,
-  defaultHeight = 120,
+  defaultWidth = 700,
+  defaultHeight = 320,
 }: {
   api: ExcalidrawImperativeAPI | null;
   defaultWidth?: number;
@@ -12,26 +13,37 @@ export function AddExpandableFrameButton({
 }) {
   const addFrame = () => {
     if (!api) return;
-    const { width, height, offsetLeft, offsetTop, zoom } = api.getAppState();
-    const x = (width / 2 - offsetLeft) / zoom.value - defaultWidth / 2;
-    const y = (height / 2 - offsetTop) / zoom.value - defaultHeight / 2;
+
+    const appState = api.getAppState();
+    const { width: vpW, height: vpH, offsetLeft, offsetTop } = appState;
+
+    // Viewport center in client pixels → scene coords (handles zoom & scroll)
+    const { x: cx, y: cy } = viewportCoordsToSceneCoords(
+      { clientX: offsetLeft + vpW / 2, clientY: offsetTop + vpH / 2 },
+      appState,
+    );
+
+    const x = Math.round(cx - defaultWidth / 2);
+    const y = Math.round(cy - defaultHeight / 2);
 
     const frame = newFrameElement({
       x,
       y,
       width: defaultWidth,
       height: defaultHeight,
-      name: "Expandable",
+      name: "",
       backgroundColor: "#ffc9c9",
     });
 
-    const customData = {
+    frame.name = "";
+
+    // mark as expandable & remember expanded size for later restores
+    (frame as any).customData = {
       expandable: true,
       collapsed: false,
       originalSize: { w: defaultWidth, h: defaultHeight },
+      title: "Expandable Frame", // or whatever default
     };
-    (frame as any).customData = { ...customData };
-    frame.name = frame.id; // handy: show id for breadcrumbs
 
     const all = api.getSceneElementsIncludingDeleted();
     api.updateScene({ elements: [...all, frame] });

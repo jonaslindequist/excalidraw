@@ -7,6 +7,7 @@ import type {
 } from "@excalidraw/element/types";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 
+import { getElementName, setElementName } from "../ea/elementMeta";
 import {
   revealElement,
   toggleFrameCollapsed,
@@ -228,83 +229,6 @@ export function LayersPanel({ api, eventTarget }: Props) {
 
   const rootRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    const el = rootRef.current;
-    if (!el) return;
-
-    const fmtPath = (e: Event) => {
-      const path: any[] = (e as any).composedPath?.() || [];
-      return path
-        .slice(0, 6)
-        .map((n) => {
-          if (!(n instanceof HTMLElement)) return String(n);
-          const id = n.id ? `#${n.id}` : "";
-          const cls = n.className
-            ? `.${String(n.className).split(" ").join(".")}`
-            : "";
-          return `${n.tagName.toLowerCase()}${id}${cls}`;
-        })
-        .join(" → ");
-    };
-
-    const logCap = (ev: Event) =>
-      console.log(
-        "%c[LAYER] capture",
-        "color:#0ea5e9",
-        ev.type,
-        "target:",
-        ev.target,
-        "currentTarget:",
-        ev.currentTarget,
-        "path:",
-        fmtPath(ev),
-      );
-    const logBub = (ev: Event) =>
-      console.log(
-        "%c[LAYER] bubble ",
-        "color:#22c55e",
-        ev.type,
-        "target:",
-        ev.target,
-        "currentTarget:",
-        ev.currentTarget,
-        "path:",
-        fmtPath(ev),
-      );
-
-    // pointerdown is most telling (prevents drag/handles)
-    el.addEventListener("pointerdown", logCap, { capture: true });
-    el.addEventListener("pointerdown", logBub);
-    el.addEventListener("click", logCap, { capture: true });
-    el.addEventListener("click", logBub);
-
-    // Document-level capture to see *who* gets it first
-    const docProbe = (ev: Event) => {
-      const top = document.elementFromPoint(
-        (ev as PointerEvent).clientX,
-        (ev as PointerEvent).clientY,
-      );
-      console.log(
-        "%c[DOC ] capture",
-        "color:#f97316",
-        ev.type,
-        "top @point:",
-        top,
-        "path:",
-        (ev as any).composedPath?.(),
-      );
-    };
-    document.addEventListener("pointerdown", docProbe, { capture: true });
-
-    return () => {
-      el.removeEventListener("pointerdown", logCap, true as any);
-      el.removeEventListener("pointerdown", logBub);
-      el.removeEventListener("click", logCap, true as any);
-      el.removeEventListener("click", logBub);
-      document.removeEventListener("pointerdown", docProbe, true as any);
-    };
-  }, []);
-
   const all = api.getSceneElementsIncludingDeleted();
   const appState = api.getAppState();
   const selectedIds = appState.selectedElementIds;
@@ -327,12 +251,11 @@ export function LayersPanel({ api, eventTarget }: Props) {
     const elToNode = (el: ExcalidrawElement): Node => ({
       kind: "element",
       id: el.id,
-      name: (el as any).name || el.type,
+      name: getElementName(el) || el.type, // 👈 use custom name if present
       type: el.type,
       hiddenByFrame:
         !!(el as any).customData?.__hiddenByFrame || !!el.isDeleted,
     });
-
     const cmpIndex = (a: any, b: any) => {
       const ia = (a?.index ?? "") as string;
       const ib = (b?.index ?? "") as string;
@@ -523,14 +446,36 @@ export function LayersPanel({ api, eventTarget }: Props) {
         <div style={{ width: 14, display: "grid", placeItems: "center" }}>
           <TypeIcon type={node.type} />
         </div>
+
         <div
           className="name"
-          title={`${node.type} — ${node.id}\nDouble-click to reveal & zoom`}
-          onClick={() => select(node.id)}
-          onDoubleClick={() => reveal(node.id)}
+          title={`${node.type} — ${node.id}\nDouble-click to rename\nShift+Double-click to reveal & zoom`}
+          onPointerDown={(e) => {
+            e.stopPropagation();
+            select(node.id);
+          }}
+          onDoubleClick={(e) => {
+            e.stopPropagation();
+            if ((e as React.MouseEvent).shiftKey) {
+              reveal(node.id);
+            } else {
+              // inline rename prompt (simple version)
+              const el = api
+                .getSceneElementsIncludingDeleted()
+                .find((x) => x.id === node.id);
+              if (!el) return;
+              const current = getElementName(el) || "";
+              const next = window.prompt("Name", current);
+              if (next != null && next.trim() !== current) {
+                setElementName(api, node.id, next.trim());
+              }
+            }
+          }}
+          style={{ cursor: "text", userSelect: "none" }}
         >
           {node.name}
         </div>
+
         <button
           className="btn"
           onPointerDown={(e) => {

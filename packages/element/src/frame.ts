@@ -930,6 +930,14 @@ export const getDefaultFrameName = (element: ExcalidrawFrameLikeElement) => {
 };
 
 export const getFrameLikeTitle = (element: ExcalidrawFrameLikeElement) => {
+  // if it's one of *your* expandable frames, suppress the built-in label
+  const cd = (element as any).customData;
+  if (cd?.expandable) {
+    // empty string = "no label" (avoids falling back to default name)
+    return "";
+  }
+
+  // original behavior
   return element.name === null ? getDefaultFrameName(element) : element.name;
 };
 
