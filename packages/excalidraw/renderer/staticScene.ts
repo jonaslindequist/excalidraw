@@ -1,4 +1,4 @@
-import { FRAME_STYLE, throttleRAF } from "@excalidraw/common";
+import { FRAME_STYLE, throttleRAF, toBrandedType } from "@excalidraw/common";
 import {
   createPlaceholderEmbeddableLabel,
   elementOverlapsWithFrame,
@@ -8,10 +8,14 @@ import {
   isEmbeddableElement,
   isIframeLikeElement,
   isTextElement,
+  renderElement,
   shouldApplyFrameClip,
 } from "@excalidraw/element";
 
-import { renderElement } from "@excalidraw/element";
+import type {
+  NonDeletedSceneElementsMap,
+  Ordered,
+} from "@excalidraw/element/types";
 
 import { getElementAbsoluteCoords } from "@excalidraw/element";
 
@@ -30,10 +34,18 @@ import {
 import { bootstrapCanvas, getNormalizedCanvasDimensions } from "./helpers";
 
 import type {
+  RenderableElementsMap,
   StaticCanvasRenderConfig,
   StaticSceneRenderConfig,
 } from "../scene/types";
 import type { StaticCanvasAppState, Zoom } from "../types";
+
+// add near the top of this file (below other consts/helpers)
+const isHiddenByFrame = (el: { customData?: any }) =>
+  !!el?.customData?.__hiddenByFrame;
+
+const isRenderableEl = (el: { customData?: any }) =>
+  el?.customData?.isVisible !== false && !isHiddenByFrame(el);
 
 const GridLineColor = {
   Bold: "#dddddd",
@@ -207,6 +219,7 @@ const renderLinkIcon = (
     context.restore();
   }
 };
+// replace the body of _renderStaticScene with this version
 const _renderStaticScene = ({
   canvas,
   rc,
@@ -217,9 +230,7 @@ const _renderStaticScene = ({
   appState,
   renderConfig,
 }: StaticSceneRenderConfig) => {
-  if (canvas === null) {
-    return;
-  }
+  if (canvas === null) return;
 
   const { renderGrid = true, isExporting } = renderConfig;
 
@@ -255,9 +266,31 @@ const _renderStaticScene = ({
     );
   }
 
+  // --- NEW: derive renderables & a pruned elementsMap that excludes hidden-by-frame
+  const renderables = visibleElements.filter(
+    isRenderableEl,
+  ) as readonly NonDeletedExcalidrawElement[];
+
+  const elementsMapActive = toBrandedType<RenderableElementsMap>(new Map());
+  const allElementsMapActive = toBrandedType<NonDeletedSceneElementsMap>(
+    new Map(),
+  );
+
+  const elementsMapPlain: ElementsMap = new Map();
+
+  for (const el of renderables) {
+    const ordered = el as unknown as Ordered<NonDeletedExcalidrawElement>;
+    elementsMapActive.set(el.id, ordered); // brand: NonDeletedElementsMap
+    allElementsMapActive.set(el.id, ordered); // brand: NonDeletedSceneElementsMap
+    elementsMapPlain.set(el.id, el); // unbranded ElementsMap
+  }
+
+  // --- END NEW
+
   const groupsToBeAddedToFrame = new Set<string>();
 
-  visibleElements.forEach((element) => {
+  // use renderables instead of visibleElements
+  renderables.forEach((element) => {
     if (
       element.groupIds.length > 0 &&
       appState.frameToHighlight &&
@@ -265,7 +298,7 @@ const _renderStaticScene = ({
       (elementOverlapsWithFrame(
         element,
         appState.frameToHighlight,
-        elementsMap,
+        elementsMapActive,
       ) ||
         element.groupIds.find((groupId) => groupsToBeAddedToFrame.has(groupId)))
     ) {
@@ -277,8 +310,8 @@ const _renderStaticScene = ({
 
   const inFrameGroupsMap = new Map<string, boolean>();
 
-  // Paint visible elements
-  visibleElements
+  // Paint visible (renderable) elements
+  renderables
     .filter((el) => !isIframeLikeElement(el))
     .forEach((element) => {
       try {
@@ -287,7 +320,7 @@ const _renderStaticScene = ({
         if (
           isTextElement(element) &&
           element.containerId &&
-          elementsMap.has(element.containerId)
+          elementsMapActive.has(element.containerId)
         ) {
           // will be rendered with the container
           return;
@@ -300,14 +333,14 @@ const _renderStaticScene = ({
           appState.frameRendering.enabled &&
           appState.frameRendering.clip
         ) {
-          const frame = getTargetFrame(element, elementsMap, appState);
+          const frame = getTargetFrame(element, elementsMapActive, appState);
           if (
             frame &&
             shouldApplyFrameClip(
               element,
               frame,
               appState,
-              elementsMap,
+              elementsMapActive,
               inFrameGroupsMap,
             )
           ) {
@@ -315,7 +348,7 @@ const _renderStaticScene = ({
           }
           renderElement(
             element,
-            elementsMap,
+            elementsMapActive,
             allElementsMap,
             rc,
             context,
@@ -325,7 +358,7 @@ const _renderStaticScene = ({
         } else {
           renderElement(
             element,
-            elementsMap,
+            elementsMapActive,
             allElementsMap,
             rc,
             context,
@@ -334,11 +367,14 @@ const _renderStaticScene = ({
           );
         }
 
-        const boundTextElement = getBoundTextElement(element, elementsMap);
+        const boundTextElement = getBoundTextElement(
+          element,
+          elementsMapActive,
+        );
         if (boundTextElement) {
           renderElement(
             boundTextElement,
-            elementsMap,
+            elementsMapActive,
             allElementsMap,
             rc,
             context,
@@ -350,7 +386,7 @@ const _renderStaticScene = ({
         context.restore();
 
         if (!isExporting) {
-          renderLinkIcon(element, context, appState, elementsMap);
+          renderLinkIcon(element, context, appState, elementsMapActive);
         }
       } catch (error: any) {
         console.error(
@@ -364,19 +400,17 @@ const _renderStaticScene = ({
       }
     });
 
-  // render embeddables on top
-  visibleElements
+  // render embeddables on top (preserve your existing filter, just use renderables)
+  renderables
     .filter(
-      (el) =>
-        el.customData?.isVisible !== false && // 👈 skip hidden elements
-        !isIframeLikeElement(el),
+      (el) => el.customData?.isVisible !== false && !isIframeLikeElement(el), // keep your current behavior
     )
     .forEach((element) => {
       try {
         const render = () => {
           renderElement(
             element,
-            elementsMap,
+            elementsMapActive,
             allElementsMap,
             rc,
             context,
@@ -396,7 +430,7 @@ const _renderStaticScene = ({
             const label = createPlaceholderEmbeddableLabel(element);
             renderElement(
               label,
-              elementsMap,
+              elementsMapActive,
               allElementsMap,
               rc,
               context,
@@ -405,12 +439,10 @@ const _renderStaticScene = ({
             );
           }
           if (!isExporting) {
-            renderLinkIcon(element, context, appState, elementsMap);
+            renderLinkIcon(element, context, appState, elementsMapActive);
           }
         };
-        // - when exporting the whole canvas, we DO NOT apply clipping
-        // - when we are exporting a particular frame, apply clipping
-        //   if the containing frame is not selected, apply clipping
+
         const frameId = element.frameId || appState.frameToHighlight?.id;
 
         if (
@@ -419,16 +451,14 @@ const _renderStaticScene = ({
           appState.frameRendering.clip
         ) {
           context.save();
-
-          const frame = getTargetFrame(element, elementsMap, appState);
-
+          const frame = getTargetFrame(element, elementsMapActive, appState);
           if (
             frame &&
             shouldApplyFrameClip(
               element,
               frame,
               appState,
-              elementsMap,
+              elementsMapActive,
               inFrameGroupsMap,
             )
           ) {
@@ -449,7 +479,7 @@ const _renderStaticScene = ({
     try {
       renderElement(
         element,
-        elementsMap,
+        elementsMapActive, // use the pruned map here too
         allElementsMap,
         rc,
         context,

@@ -31,23 +31,62 @@ import type { Scene } from "./Scene";
 import type { Bounds } from "./bounds";
 import type { ExcalidrawElement } from "./types";
 
+const DEBUG_DRAG_FRAMES = false; // set false to silence logs
+
+const dbg = (...args: any[]) => {
+  if (DEBUG_DRAG_FRAMES) console.log(...args);
+};
+const dbgg = (label: string) => {
+  if (DEBUG_DRAG_FRAMES && console.groupCollapsed)
+    console.groupCollapsed(label);
+};
+const dbge = () => {
+  if (DEBUG_DRAG_FRAMES && console.groupEnd) console.groupEnd();
+};
+
+// try to read a "parent frame" hint from customData.__hiddenByFrame
+const getHiddenParentId = (el: any): string | null => {
+  const v = el?.customData?.__hiddenByFrame;
+  if (!v) return null;
+  if (typeof v === "string") return v;
+  if (typeof v === "object") {
+    // common shapes: { parentId } or { frameId }
+    return v.parentId || v.frameId || null;
+  }
+  return null;
+};
+
+// Debug end
+
 const collectRecursiveFrameChildren = (
   frameIds: string[],
   scene: Scene,
   visited = new Set<string>(),
 ): NonDeletedExcalidrawElement[] => {
   const elementsToAdd: NonDeletedExcalidrawElement[] = [];
+  const all = scene.getNonDeletedElementsIncludingHidden();
+  console.log("All: ", all);
+  let considered = 0,
+    matched = 0,
+    recursed = 0;
 
-  for (const element of scene.getNonDeletedElements()) {
-    if (
-      element.frameId &&
-      frameIds.includes(element.frameId) &&
-      !visited.has(element.id)
-    ) {
+  for (const element of all) {
+    considered++;
+
+    const inByFrameId = !!element.frameId && frameIds.includes(element.frameId);
+
+    // DEBUG: if collapse clears frameId, try to *detect* a relationship via __hiddenByFrame
+    const hiddenParentId = getHiddenParentId(element as any);
+    const inByHiddenHint =
+      !!hiddenParentId && frameIds.includes(hiddenParentId);
+
+    if ((inByFrameId || inByHiddenHint) && !visited.has(element.id)) {
       visited.add(element.id);
       elementsToAdd.push(element);
+      matched++;
 
       if (isFrameLikeElement(element)) {
+        recursed++;
         const recursiveChildren = collectRecursiveFrameChildren(
           [element.id],
           scene,
@@ -56,6 +95,21 @@ const collectRecursiveFrameChildren = (
         elementsToAdd.push(...recursiveChildren);
       }
     }
+  }
+
+  dbg(
+    `[collector] frames=${JSON.stringify(
+      frameIds,
+    )} considered=${considered} matched=${matched} recursedIntoFrames=${recursed} added=${
+      elementsToAdd.length
+    }`,
+  );
+
+  if (DEBUG_DRAG_FRAMES && matched === 0) {
+    // Helpful warning: you selected a frame but nothing matched inside.
+    dbg(
+      `[collector] WARNING: no children found. Do your collapsed descendants keep frameId or __hiddenByFrame?`,
+    );
   }
 
   return elementsToAdd;
@@ -107,20 +161,26 @@ export const dragSelectedElements = (
 
   if (frames.length > 0) {
     const recursiveChildren = collectRecursiveFrameChildren(frames, scene);
+    console.log("Children: ", recursiveChildren);
     for (const el of recursiveChildren) {
       elementsToUpdate.add(el);
+      if (!pointerDownState.originalElements.has(el.id)) {
+        // Seed baseline as position at DRAG START:
+        // current position minus total drag delta so far.
+        pointerDownState.originalElements.set(el.id, {
+          ...el,
+          x: el.x - offset.x,
+          y: el.y - offset.y,
+        });
+      }
     }
   }
 
   const origElements: ExcalidrawElement[] = [];
 
   for (const element of elementsToUpdate) {
-    const origElement = pointerDownState.originalElements.get(element.id);
-    // if original element is not set (e.g. when you duplicate during a drag
-    // operation), exit to avoid undefined behavior
-    if (!origElement) {
-      return;
-    }
+    const origElement =
+      pointerDownState.originalElements.get(element.id) ?? element;
     origElements.push(origElement);
   }
 

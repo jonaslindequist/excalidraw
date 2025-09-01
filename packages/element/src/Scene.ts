@@ -1,3 +1,4 @@
+// DROP-IN START ---------------------------------------------------------------
 import throttle from "lodash.throttle";
 
 import {
@@ -49,6 +50,9 @@ type SceneStateCallbackRemover = () => void;
 
 type SelectionHash = string & { __brand: "selectionHash" };
 
+/** --------------------------
+ * Internal helpers
+ * -------------------------- */
 const getNonDeletedElements = <T extends ExcalidrawElement>(
   allElements: readonly T[],
 ) => {
@@ -66,9 +70,19 @@ const getNonDeletedElements = <T extends ExcalidrawElement>(
   return { elementsMap, elements };
 };
 
+const isHiddenByFrame = (el: ExcalidrawElement) =>
+  !!(el as any).customData?.__hiddenByFrame;
+
+const isRenderable = (el: ExcalidrawElement) =>
+  !el.isDeleted && !isHiddenByFrame(el);
+
 const validateIndicesThrottled = throttle(
   (elements: readonly ExcalidrawElement[]) => {
-    if (isDevEnv() || isTestEnv() || window?.DEBUG_FRACTIONAL_INDICES) {
+    if (
+      isDevEnv() ||
+      isTestEnv() ||
+      (window as any)?.DEBUG_FRACTIONAL_INDICES
+    ) {
       validateFractionalIndices(elements, {
         // throw only in dev & test, to remain functional on `DEBUG_FRACTIONAL_INDICES`
         shouldThrow: isDevEnv() || isTestEnv(),
@@ -80,10 +94,15 @@ const validateIndicesThrottled = throttle(
   { leading: true, trailing: false },
 );
 
+/** Include the hidden toggle in selection hash so the cache is correct */
 const hashSelectionOpts = (
   opts: Parameters<InstanceType<typeof Scene>["getSelectedElements"]>[0],
 ) => {
-  const keys = ["includeBoundTextElement", "includeElementsInFrames"] as const;
+  const keys = [
+    "includeBoundTextElement",
+    "includeElementsInFrames",
+    "includeHiddenByFrame", // NEW
+  ] as const;
 
   type HashableKeys = Omit<typeof opts, "selectedElementIds" | "elements">;
 
@@ -98,7 +117,7 @@ const hashSelectionOpts = (
 
   let hash = "";
   for (const key of keys) {
-    hash += `${key}:${opts[key] ? "1" : "0"}`;
+    hash += `${key}:${(opts as any)[key] ? "1" : "0"}`;
   }
   return hash as SelectionHash;
 };
@@ -146,6 +165,7 @@ export class Scene {
     return this.sceneNonce;
   }
 
+  /** Non-deleted map (may include hidden-by-frame). Keep for backwards compat. */
   getNonDeletedElementsMap() {
     return this.nonDeletedElementsMap;
   }
@@ -158,12 +178,38 @@ export class Scene {
     return this.elementsMap;
   }
 
+  /** All non-deleted (visible + hidden-by-frame). */
   getNonDeletedElements() {
     return this.nonDeletedElements;
   }
 
   getFramesIncludingDeleted() {
     return this.frames;
+  }
+
+  /** Kept for compatibility; returns all non-deleted (including hidden). */
+  getNonDeletedElementsIncludingHidden(): readonly NonDeletedExcalidrawElement[] {
+    return this.elements.filter(
+      (el) => !el.isDeleted,
+    ) as readonly NonDeletedExcalidrawElement[];
+  }
+
+  /** Preferred: elements that should render / hit-test */
+  getVisibleElements(): readonly NonDeletedExcalidrawElement[] {
+    return this.elements.filter(
+      isRenderable,
+    ) as readonly NonDeletedExcalidrawElement[];
+  }
+
+  /** Preferred: map of visible elements */
+  getVisibleElementsMap() {
+    const map = new Map() as NonDeletedSceneElementsMap;
+    for (const el of this.elements) {
+      if (isRenderable(el)) {
+        map.set(el.id, el as Ordered<NonDeletedExcalidrawElement>);
+      }
+    }
+    return map;
   }
 
   constructor(elements: ElementsMapOrArray | null = null) {
@@ -184,12 +230,25 @@ export class Scene {
     // selection-related options
     includeBoundTextElement?: boolean;
     includeElementsInFrames?: boolean;
+    /** NEW: opt-in to include hidden-by-frame elements in selection base */
+    includeHiddenByFrame?: boolean;
   }): NonDeleted<ExcalidrawElement>[] {
     const hash = hashSelectionOpts(opts);
 
-    const elements = opts?.elements || this.nonDeletedElements;
+    // Determine base set:
+    const baseElements: readonly NonDeletedExcalidrawElement[] = opts?.elements
+      ? (toArray(opts.elements).filter(
+          (el) =>
+            !el.isDeleted &&
+            (opts.includeHiddenByFrame ? true : !isHiddenByFrame(el)),
+        ) as readonly NonDeletedExcalidrawElement[])
+      : opts.includeHiddenByFrame
+      ? this.nonDeletedElements // all non-deleted
+      : this.getVisibleElements(); // default: visible only
+
+    // Cache hit?
     if (
-      this.selectedElementsCache.elements === elements &&
+      this.selectedElementsCache.elements === baseElements &&
       this.selectedElementsCache.selectedElementIds === opts.selectedElementIds
     ) {
       const cached = this.selectedElementsCache.cache.get(hash);
@@ -197,21 +256,20 @@ export class Scene {
         return cached;
       }
     } else if (opts?.elements == null) {
-      // if we're operating on latest scene elements and the cache is not
-      //  storing the latest elements, clear the cache
+      // operating on latest scene elements but base changed => clear cache
       this.selectedElementsCache.cache.clear();
     }
 
     const selectedElements = getSelectedElements(
-      elements,
+      baseElements,
       { selectedElementIds: opts.selectedElementIds },
       opts,
     );
 
-    // cache only if we're not using custom elements
+    // Cache only when using scene’s latest elements
     if (opts?.elements == null) {
       this.selectedElementsCache.selectedElementIds = opts.selectedElementIds;
-      this.selectedElementsCache.elements = this.nonDeletedElements;
+      this.selectedElementsCache.elements = baseElements;
       this.selectedElementsCache.cache.set(hash, selectedElements);
     }
 
@@ -408,15 +466,23 @@ export class Scene {
     return null;
   };
 
+  /** Default to visible map; provide a companion "including hidden" helper. */
   getElementsFromId = (id: string): ExcalidrawElement[] => {
-    const elementsMap = this.getNonDeletedElementsMap();
-    // first check if the id is an element
+    const elementsMap = this.getVisibleElementsMap(); // changed
     const el = elementsMap.get(id);
     if (el) {
       return [el];
     }
+    return getElementsInGroup(elementsMap, id);
+  };
 
-    // then, check if the id is a group
+  /** If a caller explicitly needs hidden-by-frame too */
+  getElementsFromIdIncludingHidden = (id: string): ExcalidrawElement[] => {
+    const elementsMap = this.getNonDeletedElementsMap();
+    const el = elementsMap.get(id);
+    if (el) {
+      return [el];
+    }
     return getElementsInGroup(elementsMap, id);
   };
 
@@ -433,7 +499,8 @@ export class Scene {
       isDragging: false,
     },
   ) {
-    const elementsMap = this.getNonDeletedElementsMap();
+    // Use visible map by default so hidden-by-frame elements don't affect constraints/hittest
+    const elementsMap = this.getVisibleElementsMap(); // changed
 
     const { version: prevVersion } = element;
     const { version: nextVersion } = mutateElement(
@@ -456,3 +523,4 @@ export class Scene {
     return element;
   }
 }
+// DROP-IN END -----------------------------------------------------------------

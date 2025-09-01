@@ -50,6 +50,13 @@ enum ViewMode {
  * Small SVG Icon set (mini icons, neutral color; CSS can tint on hover/selected)
  * -------------------------------------------------------------------------- */
 
+const IconHidden = () => (
+  <Svg>
+    <circle cx="12" cy="12" r="7.5" fill="none" stroke="currentColor" />
+    <path d="M5 5L19 19" stroke="currentColor" strokeWidth={2} />
+  </Svg>
+);
+
 const Svg: React.FC<React.SVGProps<SVGSVGElement> & { size?: number }> = ({
   size = 12,
   children,
@@ -413,14 +420,18 @@ export function LayersPanel({ api, eventTarget }: Props) {
             {/* Name */}
             <div
               className="name"
-              title={node.id}
+              title={(node.hiddenByFrame ? "Hidden by frame — " : "") + node.id}
               onPointerDown={(e) => {
                 e.stopPropagation();
-                // select on press feels snappier and avoids “no click” cases
                 select(node.id);
               }}
               onDoubleClick={() => scrollTo(node.id)}
             >
+              {node.hiddenByFrame && (
+                <span className="tag-hidden" title="Hidden by frame">
+                  <IconHidden />
+                </span>
+              )}
               {node.name}
             </div>
           </div>

@@ -6,159 +6,36 @@ import type {
 import { sceneCoordsToViewportCoords } from "@excalidraw/excalidraw";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 
-/* -------------------------------------------------------------------------- */
-/* Layout constants                                                           */
-/* -------------------------------------------------------------------------- */
-const HEADER_W = 220;
-const HEADER_H = 22;
-
-// when expanded we render header above the frame (in viewport px)
-const HEADER_MARGIN_ABOVE = 6;
-const CLAMP_PAD = 4; // clamp header inside center container by this many px
-
-// collapsed frame size (header shows as a pill, frame collapsed)
-export const COLLAPSED_W = HEADER_W;
-export const COLLAPSED_H = HEADER_H + 10; // small “peek” under the pill
-
-// hide the text label under this zoom (keeps UI legible when zoomed way out)
-const LABEL_HIDE_ZOOM = 0.15;
-
-// below this zoom we hide the header bar and show a tiny text label
-const HEADER_HIDE_ZOOM = 0.5;
-
-// header width computation parts (px)
-const HEADER_SIDE_PAD = 8; // matches header style padding: "0 8px"
-const HEADER_GAP = 6; // matches header style gap: 6px
-const CHEV_W = 18; // chevron button width
-const ICON_W = 14; // frame icon width
-const HEADER_MIN_W = 110;
-const HEADER_MAX_W = 360;
-const HEADER_FONT_CSS =
-  "12px system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
-
-// text-only label when headers are hidden
-const MINI_LABEL_BASE = 14; // font size at zoom=1
-const MINI_LABEL_MIN = 8;
-const MINI_LABEL_MAX = 20;
-const MINI_LABEL_MARGIN_ABOVE = 2; // a little closer to the frame than the header
-
-let __measureCtx: CanvasRenderingContext2D | null = null;
-const measureTextPx = (text: string, fontCss: string) => {
-  if (!__measureCtx) {
-    __measureCtx = document.createElement("canvas").getContext("2d");
-  }
-  if (!__measureCtx) return text.length * 7; // fallback
-  __measureCtx.font = fontCss;
-  return Math.ceil(__measureCtx.measureText(text).width);
-};
-
-const clamp = (v: number, min: number, max: number) =>
-  Math.max(min, Math.min(v, max));
-
-console.info(
-  "[EA overlay] loaded from",
-  (import.meta as any)?.url || "<no import.meta.url>",
-);
-(window as any).__EA_OVERLAY_URL__ = (import.meta as any)?.url || "unknown";
-
-/* -------------------------------------------------------------------------- */
-
-type ById = Map<string, ExcalidrawElement>;
-
-const isFrame = (el: ExcalidrawElement): el is ExcalidrawFrameElement =>
-  el.type === "frame";
-
-const setStyle = (el: HTMLElement, styles: Record<string, string | number>) => {
-  for (const [k, v] of Object.entries(styles)) {
-    (el.style as any)[k] = typeof v === "number" ? String(v) : v;
-  }
-};
-
-// Build maps: byId and childrenByFrame
-const buildIndexes = (all: readonly ExcalidrawElement[]) => {
-  const byId: ById = new Map(all.map((e) => [e.id, e] as const));
-  const childrenByFrame = new Map<string, ExcalidrawElement[]>();
-  for (const el of all) {
-    if (el.frameId) {
-      if (!childrenByFrame.has(el.frameId)) childrenByFrame.set(el.frameId, []);
-      childrenByFrame.get(el.frameId)!.push(el);
-    }
-  }
-  return { byId, childrenByFrame };
-};
-
-const getFrameTitle = (frame: ExcalidrawFrameElement) => {
-  const cd = (frame as any).customData ?? {};
-  const name = (frame.name ?? "").toString().trim();
-  const title = (cd.title ?? "").toString().trim();
-  // Prefer the built-in name if present; fall back to custom title, then id.
-  return name || title || frame.id;
-};
-
-// DFS over descendants
-const walkDescendants = (
-  root: ExcalidrawElement,
-  childrenByFrame: Map<string, ExcalidrawElement[]>,
-  fn: (el: ExcalidrawElement) => void,
-) => {
-  const stack = [...(childrenByFrame.get(root.id) ?? [])];
-  while (stack.length) {
-    const el = stack.pop()!;
-    fn(el);
-    if (isFrame(el)) stack.push(...(childrenByFrame.get(el.id) ?? []));
-  }
-};
-
-// Compute elements hidden by any collapsed ancestor frame
-const computeHiddenGlobal = (byId: ById) => {
-  const hidden = new Set<string>();
-  for (const el of byId.values()) {
-    let cur: ExcalidrawElement | undefined = el;
-    while (cur?.frameId) {
-      const parent = byId.get(cur.frameId);
-      if (!parent) break;
-      if ((parent as any).customData?.collapsed) {
-        hidden.add(el.id);
-        break;
-      }
-      cur = parent;
-    }
-  }
-  return hidden;
-};
-
-// Apply hidden set using isDeleted, tagging with __hiddenByFrame
-const applyHiddenByFrame = (
-  all: readonly ExcalidrawElement[],
-  hidden: Set<string>,
-) => {
-  return all.map((el) => {
-    const cd = (el as any).customData ?? {};
-    const shouldHide = hidden.has(el.id);
-
-    if (shouldHide) {
-      if (el.isDeleted && !cd.__hiddenByFrame) return el; // user-deleted stays
-      if (!el.isDeleted || !cd.__hiddenByFrame) {
-        return {
-          ...el,
-          isDeleted: true,
-          customData: { ...cd, __hiddenByFrame: true },
-        } as ExcalidrawElement;
-      }
-      return el;
-    }
-
-    if (cd.__hiddenByFrame) {
-      const { __hiddenByFrame, ...rest } = cd;
-      return {
-        ...el,
-        isDeleted: false,
-        customData: Object.keys(rest).length ? rest : undefined,
-      } as ExcalidrawElement;
-    }
-    return el;
-  });
-};
+import {
+  CHEV_W,
+  CLAMP_PAD,
+  COLLAPSED_H,
+  COLLAPSED_W,
+  HEADER_FONT_CSS,
+  HEADER_GAP,
+  HEADER_H,
+  HEADER_HIDE_ZOOM,
+  HEADER_MARGIN_ABOVE,
+  HEADER_MAX_W,
+  HEADER_MIN_W,
+  HEADER_SIDE_PAD,
+  HEADER_W,
+  ICON_W,
+  LABEL_HIDE_ZOOM,
+  MINI_LABEL_BASE,
+  MINI_LABEL_MARGIN_ABOVE,
+  MINI_LABEL_MAX,
+  MINI_LABEL_MIN,
+} from "./overlay-constants";
+import { clamp, measureTextPx, setStyle, svgFrameIcon } from "./overlay-dom";
+import {
+  applyHiddenByFrame,
+  buildIndexes,
+  computeHiddenGlobal,
+  getFrameTitle,
+  walkDescendants,
+  type ById,
+} from "./overlay-logic";
 
 /* -------------------------------------------------------------------------- */
 /* Public helpers                                                             */
@@ -168,10 +45,10 @@ export function revealElement(
   api: ExcalidrawImperativeAPI,
   elementId: string,
   opts?: {
-    select?: boolean; // default true
-    scroll?: boolean; // default true
-    animate?: boolean; // default true
-    fitToContent?: boolean; // default true
+    select?: boolean;
+    scroll?: boolean;
+    animate?: boolean;
+    fitToContent?: boolean;
   },
 ) {
   const select = opts?.select ?? true;
@@ -185,7 +62,7 @@ export function revealElement(
   const target = byId.get(elementId);
   if (!target) return;
 
-  // collapsed ancestors to expand
+  // expand collapsed ancestors
   const framesToExpand: ExcalidrawFrameElement[] = [];
   let cur: ExcalidrawElement | undefined = target;
   while (cur?.frameId) {
@@ -197,25 +74,41 @@ export function revealElement(
     cur = parent;
   }
 
-  // expand in one batch, restoring originalSize if available
   let working = all as ExcalidrawElement[];
   if (framesToExpand.length) {
     working = working.map((el) => {
-      const f = framesToExpand.find((fr) => fr.id === el.id);
-      if (!f) return el;
-      const cd = (f as any).customData ?? {};
-      const size = cd.originalSize ?? { w: f.width, h: f.height };
-      return {
+      const isOne = framesToExpand.some((fr) => fr.id === el.id);
+      if (!isOne) return el;
+
+      const cd: any = (el as any).customData ?? {};
+      const size = cd.originalSize ?? {
+        w: (el as any).width,
+        h: (el as any).height,
+      };
+
+      const prevTitle = String(cd.title ?? "").trim();
+      const prevName =
+        el.type === "frame" ? String((el as any).name ?? "").trim() : "";
+      const stableTitle = prevTitle || prevName;
+
+      const cdNext: any = {
+        ...cd,
+        expandable: true,
+        collapsed: false,
+        originalSize: size,
+      };
+      if (stableTitle) cdNext.title = stableTitle;
+
+      const updated: any = {
         ...el,
         width: size.w,
         height: size.h,
-        customData: {
-          ...cd,
-          expandable: true,
-          collapsed: false,
-          originalSize: size,
-        },
-      } as ExcalidrawElement;
+        customData: cdNext,
+      };
+      if (el.type === "frame" && !prevName && stableTitle)
+        updated.name = stableTitle;
+
+      return updated as ExcalidrawElement;
     });
 
     const hidden = computeHiddenGlobal(new Map(working.map((e) => [e.id, e])));
@@ -236,7 +129,6 @@ export function revealElement(
   }
 }
 
-// collapse/expand a frame (optionally recursive)
 export function toggleFrameCollapsed(
   api: ExcalidrawImperativeAPI,
   frameId: string,
@@ -259,30 +151,37 @@ export function toggleFrameCollapsed(
   }
 
   const next = all.map((el) => {
-    const f = framesToToggle.find((fr) => fr.id === el.id);
-    if (!f) return el;
+    const shouldToggle = framesToToggle.some((fr) => fr.id === el.id);
+    if (!shouldToggle) return el;
 
-    const prevCD: any = (f as any).customData ?? {};
-    // If we're collapsing, snapshot CURRENT expanded size right now.
-    // If expanding, reuse the last snapshot (or current size as fallback).
+    const prevCD: any = (el as any).customData ?? {};
     const nextOriginalSize = desiredCollapsed
-      ? { w: f.width, h: f.height }
-      : prevCD.originalSize ?? { w: f.width, h: f.height };
+      ? { w: (el as any).width, h: (el as any).height }
+      : prevCD.originalSize ?? { w: (el as any).width, h: (el as any).height };
 
     const width = desiredCollapsed ? COLLAPSED_W : nextOriginalSize.w;
     const height = desiredCollapsed ? COLLAPSED_H : nextOriginalSize.h;
 
-    return {
-      ...f,
-      width,
-      height,
-      customData: {
-        ...prevCD,
-        expandable: true,
-        collapsed: desiredCollapsed,
-        originalSize: nextOriginalSize,
-      },
-    } as ExcalidrawElement;
+    const prevTitle = String(prevCD.title ?? "").trim();
+    const prevName =
+      el.type === "frame" ? String((el as any).name ?? "").trim() : "";
+    const stableTitle = prevTitle || prevName; // ← no empty default
+
+    const cdNext: any = {
+      ...prevCD,
+      expandable: true,
+      collapsed: desiredCollapsed,
+      originalSize: nextOriginalSize,
+    };
+    if (stableTitle) cdNext.title = stableTitle; // only set if non-empty
+
+    const updated: any = { ...el, width, height, customData: cdNext };
+
+    // mirror into `name` only for frames, and only if name was empty
+    if (el.type === "frame" && !prevName && stableTitle) {
+      updated.name = stableTitle;
+    }
+    return updated as ExcalidrawElement;
   });
 
   const hidden = computeHiddenGlobal(new Map(next.map((e) => [e.id, e])));
@@ -332,26 +231,6 @@ export function mountExpandableFramesOverlay(
     });
   };
 
-  // tiny SVG frame icon
-  const svgFrameIcon = () => {
-    const ns = "http://www.w3.org/2000/svg";
-    const svg = document.createElementNS(ns, "svg");
-    svg.setAttribute("width", "14");
-    svg.setAttribute("height", "14");
-    svg.setAttribute("viewBox", "0 0 24 24");
-    svg.style.display = "block";
-    const rect = document.createElementNS(ns, "rect");
-    rect.setAttribute("x", "4");
-    rect.setAttribute("y", "6");
-    rect.setAttribute("width", "16");
-    rect.setAttribute("height", "12");
-    rect.setAttribute("rx", "3");
-    rect.setAttribute("fill", "none");
-    rect.setAttribute("stroke", "currentColor");
-    svg.appendChild(rect);
-    return svg;
-  };
-
   const startInlineRename = (
     frame: ExcalidrawFrameElement,
     header: HTMLDivElement,
@@ -359,7 +238,7 @@ export function mountExpandableFramesOverlay(
   ) => {
     const input = document.createElement("input");
     input.type = "text";
-    input.value = frame.name || "";
+    input.value = getFrameTitle(frame);
     setStyle(input, {
       flex: "1 1 auto",
       minWidth: "40px",
@@ -374,16 +253,24 @@ export function mountExpandableFramesOverlay(
 
     const finish = (commit: boolean) => {
       if (commit) {
-        const nextTitle = input.value.trim();
+        // Use current header value; if empty, fall back to existing title
+        const typed = input.value.trim();
+        const fallback = getFrameTitle(frame);
+        const nextTitle = typed || fallback;
+
         const all = api.getSceneElementsIncludingDeleted();
         const next = all.map((el) => {
           if (el.id !== frame.id) return el;
           const cd = (el as any).customData ?? {};
-          return {
+          const updated: any = {
             ...el,
-            name: syncName ? nextTitle : el.customData?.name, // sync built-in name if desired
             customData: { ...cd, title: nextTitle },
-          } as ExcalidrawElement;
+          };
+          // only frames have `name`
+          if (syncName && el.type === "frame") {
+            updated.name = nextTitle;
+          }
+          return updated as ExcalidrawElement;
         });
         api.updateScene({ elements: next });
       }
@@ -415,10 +302,8 @@ export function mountExpandableFramesOverlay(
     const elements = api.getSceneElements();
     const zoom = appState.zoom.value;
 
-    // center container rect to convert viewport->local
     const rect = root.getBoundingClientRect();
 
-    // theme
     const isDark = appState.theme === "dark";
     const bg = isDark ? "rgba(24,24,28,0.85)" : "rgba(255,255,255,0.9)";
     const fg = isDark ? "#e5e7eb" : "#111";
@@ -462,11 +347,10 @@ export function mountExpandableFramesOverlay(
           maxWidth: "360px",
           overflow: "hidden",
           whiteSpace: "nowrap",
-          transition: "opacity 120ms ease",
-          opacity: "0.35",
+          transition: "border-color 120ms ease, box-shadow 120ms ease", // ← optional niceness
+          // opacity: "0.35",  // ← delete this
         });
 
-        // stop gestures escaping to canvas
         header.addEventListener("mousedown", (e) => e.stopPropagation());
         header.addEventListener("pointerdown", (e) => {
           e.stopPropagation();
@@ -480,9 +364,7 @@ export function mountExpandableFramesOverlay(
           ) as HTMLDivElement | null;
           if (labelEl) startInlineRename(frame, header!, labelEl);
         });
-        header.addEventListener("mouseenter", () => {
-          header!.style.opacity = "1";
-        });
+        header.addEventListener("mouseenter", () => {});
         header.addEventListener("mouseleave", () => {
           const isSelected = !!api.getAppState().selectedElementIds[frame.id];
           header!.style.opacity = isSelected ? "1" : "0.35";
@@ -508,12 +390,18 @@ export function mountExpandableFramesOverlay(
           toggle(frame.id, alt);
         });
 
+        chev.addEventListener("dblclick", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        });
+
         const iconWrap = document.createElement("span");
         setStyle(iconWrap, {
           display: "grid",
           placeItems: "center",
           opacity: "0.8",
         });
+
         iconWrap.appendChild(svgFrameIcon());
 
         const label = document.createElement("div");
@@ -571,7 +459,6 @@ export function mountExpandableFramesOverlay(
         header.appendChild(iconWrap);
         header.appendChild(label);
         header.appendChild(factsBadge);
-
         root.appendChild(header);
         headers.set(frame.id, header);
       }
@@ -582,12 +469,22 @@ export function mountExpandableFramesOverlay(
 
       header.style.color = fg;
       header.style.background = bg;
-      header.style.border = `1px solid ${border}`;
-      header.style.boxShadow = isDark
+
+      const selectedBorder = isDark ? "#60a5fa" : "#2563eb"; // blue-400 / blue-600
+      header.style.border = isSelected
+        ? `2px solid ${selectedBorder}`
+        : `1px solid ${border}`;
+
+      // subtle bump when selected (optional)
+      header.style.boxShadow = isSelected
+        ? isDark
+          ? "0 0 0 2px rgba(96,165,250,0.25), 0 1px 3px rgba(0,0,0,0.45)"
+          : "0 0 0 2px rgba(37,99,235,0.15), 0 1px 3px rgba(0,0,0,0.18)"
+        : isDark
         ? "0 1px 3px rgba(0,0,0,0.35)"
         : "0 1px 3px rgba(0,0,0,0.12)";
 
-      // ensure data attribute & label text stay in sync with name/title
+      // keep attribute & label text in sync
       const title = getFrameTitle(frame);
       header.setAttribute("data-exca-frame-header", title);
       const labelEl = header.querySelector(
@@ -598,7 +495,7 @@ export function mountExpandableFramesOverlay(
         labelEl.title = title;
       }
 
-      // frame top-left in viewport
+      // position + sizing
       const tl = sceneCoordsToViewportCoords(
         { sceneX: frame.x, sceneY: frame.y },
         appState,
@@ -606,10 +503,7 @@ export function mountExpandableFramesOverlay(
       const leftLocal = tl.x - rect.left;
       const topLocal = tl.y - rect.top;
 
-      // measure needed header width from title text
       const labelTextPx = measureTextPx(title, HEADER_FONT_CSS);
-
-      // total width = chevron + gap + icon + gap + text + side paddings
       const naturalHeaderW =
         CHEV_W +
         HEADER_GAP +
@@ -619,10 +513,9 @@ export function mountExpandableFramesOverlay(
         HEADER_SIDE_PAD * 2;
 
       const headerWidthPx = collapsed
-        ? HEADER_W // keep pill size when collapsed
+        ? HEADER_W
         : clamp(naturalHeaderW, HEADER_MIN_W, HEADER_MAX_W);
 
-      // place ABOVE the frame (and clamp)
       const unclampedLeft = leftLocal;
       const unclampedTop = topLocal - HEADER_H - HEADER_MARGIN_ABOVE;
 
@@ -637,25 +530,22 @@ export function mountExpandableFramesOverlay(
         rect.height - HEADER_H - CLAMP_PAD,
       );
 
-      // decide which UI to show based on zoom
       const useMiniLabel = zoom < HEADER_HIDE_ZOOM;
       const showNothing = zoom < LABEL_HIDE_ZOOM;
 
-      // ----- HEADER BAR -----
       if (!useMiniLabel && !showNothing) {
         header.style.display = "flex";
         header.style.width = `${headerWidthPx}px`;
         header.style.left = `${clampedLeft}px`;
         header.style.top = `${clampedTop}px`;
-        header.style.opacity = collapsed ? "1" : isSelected ? "1" : "0.35";
-
+        header.style.opacity = "1";
         if (labelEl) labelEl.style.display = "block";
       } else {
         header.style.display = "none";
         if (labelEl) labelEl.style.display = "none";
       }
 
-      // ----- MINI TEXT LABEL (zoomed) -----
+      // mini label
       let mini = miniLabels.get(frame.id);
       if (!mini) {
         mini = document.createElement("div");
@@ -671,8 +561,6 @@ export function mountExpandableFramesOverlay(
             : "0 1px 2px rgba(0,0,0,.35)",
         });
       }
-
-      // mini label content + style
       mini.textContent = title;
       const miniFontPx = clamp(
         MINI_LABEL_BASE * zoom,
@@ -683,7 +571,6 @@ export function mountExpandableFramesOverlay(
       mini.style.fontWeight = isSelected ? "600" : "500";
 
       if (useMiniLabel && !showNothing) {
-        // compute mini label width to clamp within container
         const miniW = Math.min(
           rect.width - CLAMP_PAD * 2,
           Math.max(
@@ -711,20 +598,18 @@ export function mountExpandableFramesOverlay(
         mini.style.display = "none";
       }
 
-      // chevron (unchanged)
+      // chevron + facts badge
       const chevBtn = header.querySelector("button")!;
       chevBtn.textContent = collapsed ? "▸" : "▾";
       chevBtn.title = collapsed
         ? "Expand (Alt: recursive)"
         : "Collapse (Alt: recursive)";
-
-      // facts badge visibility (unchanged)
       const badge = header.querySelector("span:last-child") as HTMLSpanElement;
       const hasFacts = !!(frame as any).customData?.factId;
       badge.style.display = hasFacts ? "inline-block" : "none";
     }
 
-    // cleanup for removed frames/labels
+    // cleanup
     for (const [id, el] of headers) {
       if (!frames.find((f) => f.id === id)) {
         el.remove();
@@ -744,20 +629,18 @@ export function mountExpandableFramesOverlay(
     schedule();
   };
 
-  // keep hidden flags consistent on mount (import/collab)
+  // reconcile hidden flags on mount
   reconcileHiddenByFrame(api, schedule);
 
-  const onCamera = () => schedule();
-  const onScene = () => schedule();
-
-  root.addEventListener("exca:camera", onCamera as EventListener);
-  root.addEventListener("exca:scene", onScene as EventListener);
+  // listen for host nudges (optional but nice)
+  root.addEventListener("exca:camera", (() => schedule()) as EventListener);
+  root.addEventListener("exca:scene", (() => schedule()) as EventListener);
 
   const ro = new ResizeObserver(() => schedule());
   ro.observe(root);
   if (container !== root) ro.observe(container);
 
-  // --- Heartbeat: re-render when frames (id/name/title/size/pos) or zoom/theme change
+  // heartbeat: re-render on zoom/theme/frame changes even if host forgets to nudge
   let lastSig = "";
   const sceneSignature = () => {
     const app = api.getAppState();
@@ -789,11 +672,11 @@ export function mountExpandableFramesOverlay(
   render();
 
   return {
-    root, // dispatch CustomEvents here (exca:scene / exca:camera)
+    root,
     dispose: () => {
       ro.disconnect();
-      root.removeEventListener("exca:camera", onCamera as EventListener);
-      root.removeEventListener("exca:scene", onScene as EventListener);
+      root.removeEventListener("exca:camera", (() => {}) as EventListener);
+      root.removeEventListener("exca:scene", (() => {}) as EventListener);
       for (const [, el] of headers) el.remove();
       headers.clear();
       for (const [, el] of miniLabels) el.remove();
@@ -814,7 +697,6 @@ export function reconcileHiddenByFrame(
   const all = api.getSceneElementsIncludingDeleted();
   const byId: ById = new Map(all.map((e) => [e.id, e] as const));
   const hidden = computeHiddenGlobal(byId);
-
   const next = applyHiddenByFrame(all, hidden);
 
   let dirty = false;
