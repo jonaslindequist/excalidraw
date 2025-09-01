@@ -7,20 +7,15 @@ import { sceneCoordsToViewportCoords } from "@excalidraw/excalidraw";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 
 import {
-  CHEV_W,
   CLAMP_PAD,
   COLLAPSED_H,
   COLLAPSED_W,
-  HEADER_FONT_CSS,
-  HEADER_GAP,
   HEADER_H,
   HEADER_HIDE_ZOOM,
   HEADER_MARGIN_ABOVE,
   HEADER_MAX_W,
   HEADER_MIN_W,
-  HEADER_SIDE_PAD,
   HEADER_W,
-  ICON_W,
   LABEL_HIDE_ZOOM,
   MINI_LABEL_BASE,
   MINI_LABEL_MARGIN_ABOVE,
@@ -40,6 +35,8 @@ import {
 /* -------------------------------------------------------------------------- */
 /* Public helpers                                                             */
 /* -------------------------------------------------------------------------- */
+const isHiddenByFrame = (el: { customData?: any }) =>
+  !!el?.customData?.__hiddenByFrame;
 
 export function revealElement(
   api: ExcalidrawImperativeAPI,
@@ -318,6 +315,16 @@ export function mountExpandableFramesOverlay(
 
     for (const frame of frames) {
       const titleNow = getFrameTitle(frame);
+      const hidden = isHiddenByFrame(frame);
+
+      // If hidden-by-frame, hide existing header/mini (if any) and skip work
+      if (hidden) {
+        const maybeHeader = headers.get(frame.id);
+        if (maybeHeader) maybeHeader.style.display = "none";
+        const maybeMini = miniLabels.get(frame.id);
+        if (maybeMini) maybeMini.style.display = "none";
+        continue;
+      }
 
       let header = headers.get(frame.id);
       if (!header) {
@@ -496,6 +503,8 @@ export function mountExpandableFramesOverlay(
       }
 
       // position + sizing
+      // position + sizing
+      // position + sizing
       const tl = sceneCoordsToViewportCoords(
         { sceneX: frame.x, sceneY: frame.y },
         appState,
@@ -503,19 +512,30 @@ export function mountExpandableFramesOverlay(
       const leftLocal = tl.x - rect.left;
       const topLocal = tl.y - rect.top;
 
-      const labelTextPx = measureTextPx(title, HEADER_FONT_CSS);
-      const naturalHeaderW =
-        CHEV_W +
-        HEADER_GAP +
-        ICON_W +
-        HEADER_GAP +
-        labelTextPx +
-        HEADER_SIDE_PAD * 2;
+      const useMiniLabel = zoom < HEADER_HIDE_ZOOM;
+      const showNothing = zoom < LABEL_HIDE_ZOOM;
 
-      const headerWidthPx = collapsed
-        ? HEADER_W
-        : clamp(naturalHeaderW, HEADER_MIN_W, HEADER_MAX_W);
+      // --- measure natural width robustly ---
+      // ensure measurable without flashing
+      const prevDisplay = header.style.display;
+      const prevVisibility = header.style.visibility;
+      header.style.display = "flex";
+      header.style.visibility = "hidden";
 
+      // remove constraints so we get the true natural width
+      header.style.width = "auto";
+      header.style.minWidth = "0";
+      header.style.maxWidth = "none";
+      if (labelEl) labelEl.style.display = "block";
+
+      const natural = Math.ceil(header.scrollWidth);
+
+      // ↓ key change: don't force the default collapsed min
+      const minW = collapsed ? Math.min(HEADER_W, natural) : HEADER_MIN_W;
+      const maxW = HEADER_MAX_W;
+      const headerWidthPx = Math.min(Math.max(natural, minW), maxW);
+
+      // compute clamped position
       const unclampedLeft = leftLocal;
       const unclampedTop = topLocal - HEADER_H - HEADER_MARGIN_ABOVE;
 
@@ -530,16 +550,15 @@ export function mountExpandableFramesOverlay(
         rect.height - HEADER_H - CLAMP_PAD,
       );
 
-      const useMiniLabel = zoom < HEADER_HIDE_ZOOM;
-      const showNothing = zoom < LABEL_HIDE_ZOOM;
-
+      // apply final constraints & show/hide
       if (!useMiniLabel && !showNothing) {
-        header.style.display = "flex";
-        header.style.width = `${headerWidthPx}px`;
+        header.style.width = `${headerWidthPx}px`; // lock width
+        header.style.minWidth = `${minW}px`;
+        header.style.maxWidth = `${maxW}px`;
         header.style.left = `${clampedLeft}px`;
         header.style.top = `${clampedTop}px`;
         header.style.opacity = "1";
-        if (labelEl) labelEl.style.display = "block";
+        header.style.visibility = "visible";
       } else {
         header.style.display = "none";
         if (labelEl) labelEl.style.display = "none";
@@ -653,9 +672,11 @@ export function mountExpandableFramesOverlay(
       `th=${app.theme}`,
       ...frames.map((f) => {
         const cd: any = (f as any).customData ?? {};
-        return `${f.id}:${f.name ?? ""}:${cd.title ?? ""}:${
-          cd.collapsed ? 1 : 0
-        }:${f.x}:${f.y}:${f.width}:${f.height}`;
+        const hid = cd.__hiddenByFrame ? 1 : 0; // NEW
+        const col = cd.collapsed ? 1 : 0;
+        return `${f.id}:${f.name ?? ""}:${cd.title ?? ""}:${col}:${hid}:${
+          f.x
+        }:${f.y}:${f.width}:${f.height}`;
       }),
     ].join("|");
   };
