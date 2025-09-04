@@ -3,9 +3,13 @@ import type {
   ExcalidrawElement,
   ExcalidrawFrameElement,
 } from "@excalidraw/element/types";
-import { sceneCoordsToViewportCoords } from "@excalidraw/excalidraw";
+import {
+  bumpVersion,
+  sceneCoordsToViewportCoords,
+} from "@excalidraw/excalidraw";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 
+import { updateElbowArrowPoints } from "../../../packages/element/src";
 import {
   CLAMP_PAD,
   COLLAPSED_H,
@@ -27,6 +31,7 @@ import {
   applyHiddenByFrame,
   buildIndexes,
   computeHiddenGlobal,
+  forceRerouteElbowsForFrames,
   getFrameTitle,
   walkDescendants,
   type ById,
@@ -111,6 +116,11 @@ export function revealElement(
     const hidden = computeHiddenGlobal(new Map(working.map((e) => [e.id, e])));
     working = applyHiddenByFrame(working, hidden);
     api.updateScene({ elements: working });
+
+    forceRerouteElbowsForFrames(
+      api,
+      framesToExpand.map((f) => f.id),
+    );
   }
 
   if (select) {
@@ -125,6 +135,66 @@ export function revealElement(
     api.scrollToContent(updatedTarget, { animate, fitToContent });
   }
 }
+
+export const rerouteElbowsTouchingFrames = (
+  elements: readonly ExcalidrawElement[],
+  changedFrameIds: string[],
+): ExcalidrawElement[] => {
+  // IMPORTANT: full map of all non-deleted elements
+  const live = elements.filter((e: any) => !e.isDeleted);
+  const elementsMap = new Map(live.map((e) => [e.id, e])) as any;
+
+  const changed = new Set(changedFrameIds);
+  const updates = new Map<string, ExcalidrawElement>();
+
+  for (const el of live) {
+    if (el.type !== "arrow") continue;
+    const arrow: any = el;
+
+    // elbow-only
+    const isElbow =
+      arrow.elbowed === true || (arrow.fixedSegments?.length ?? 0) > 0;
+    if (!isElbow) continue;
+
+    // must be bound to a changed frame
+    const sb = arrow.startBinding?.elementId;
+    const eb = arrow.endBinding?.elementId;
+    if (!(sb && changed.has(sb)) && !(eb && changed.has(eb))) continue;
+
+    // make an ephemeral copy with fixedSegments cleared so routing is unconstrained
+    const ep = { ...arrow, fixedSegments: null } as any;
+
+    // two-point update = “recompute all interior elbows”
+    const start = ep.points[0];
+    const end = ep.points[ep.points.length - 1];
+
+    // Pass 1: mimic drag (snapping/heading logic like real movement)
+    const dragUpd = updateElbowArrowPoints(
+      ep,
+      elementsMap,
+      { points: [start, end] }, // do NOT pass fixedSegments here
+      { isDragging: true },
+    );
+    const mid = { ...ep, ...dragUpd };
+    elementsMap.set(arrow.id, mid); // so Pass 2 sees the latest geometry
+
+    // Pass 2: finalize/normalize (mouseup)
+    const upUpd = updateElbowArrowPoints(
+      mid,
+      elementsMap,
+      { points: [mid.points[0], mid.points[mid.points.length - 1]] },
+      { isDragging: false },
+    );
+
+    const finalArrow = bumpVersion({
+      ...mid,
+      ...(upUpd ?? {}),
+    }) as ExcalidrawElement;
+    updates.set(arrow.id, finalArrow);
+  }
+
+  return elements.map((el) => updates.get(el.id) ?? el);
+};
 
 export function toggleFrameCollapsed(
   api: ExcalidrawImperativeAPI,
@@ -184,7 +254,17 @@ export function toggleFrameCollapsed(
   const hidden = computeHiddenGlobal(new Map(next.map((e) => [e.id, e])));
   const applied = applyHiddenByFrame(next, hidden);
 
-  api.updateScene({ elements: applied });
+  const rerouted = rerouteElbowsTouchingFrames(
+    applied,
+    framesToToggle.map((f) => f.id),
+  );
+
+  api.updateScene({ elements: rerouted });
+
+  forceRerouteElbowsForFrames(
+    api,
+    framesToToggle.map((f) => f.id),
+  );
 }
 
 /* -------------------------------------------------------------------------- */
@@ -463,7 +543,6 @@ export function mountExpandableFramesOverlay(
         });
 
         header.appendChild(chev);
-        header.appendChild(iconWrap);
         header.appendChild(label);
         header.appendChild(factsBadge);
         root.appendChild(header);

@@ -14,13 +14,13 @@ import {
 } from "@excalidraw/math";
 
 import {
+  arrayToMap,
   BinaryHeap,
+  getSizeFromPoints,
   invariant,
   isAnyTrue,
-  tupleToCoors,
-  getSizeFromPoints,
   isDevEnv,
-  arrayToMap,
+  tupleToCoors,
 } from "@excalidraw/common";
 
 import type { AppState } from "@excalidraw/excalidraw/types";
@@ -28,8 +28,8 @@ import type { AppState } from "@excalidraw/excalidraw/types";
 import {
   bindPointToSnapToElementOutline,
   FIXED_BINDING_DISTANCE,
-  getHeadingForElbowArrowSnap,
   getGlobalFixedPointForBindableElement,
+  getHeadingForElbowArrowSnap,
   getHoveredElementForBinding,
 } from "./binding";
 import { distanceToElement } from "./distance";
@@ -40,10 +40,10 @@ import {
   HEADING_LEFT,
   HEADING_RIGHT,
   HEADING_UP,
+  headingForPoint,
   headingForPointIsHorizontal,
   headingIsHorizontal,
   vectorToHeading,
-  headingForPoint,
 } from "./heading";
 import { type ElementUpdate } from "./mutateElement";
 import { isBindableElement } from "./typeChecks";
@@ -1056,9 +1056,15 @@ export const updateElbowArrowPoints = (
   }
 
   // Short circuit on no-op to avoid huge performance hit
+  const fixedSegsProvided = Object.prototype.hasOwnProperty.call(
+    updates,
+    "fixedSegments",
+  );
+
   if (
     updates.startBinding === arrow.startBinding &&
     updates.endBinding === arrow.endBinding &&
+    !fixedSegsProvided && // <-- only no-op if fixedSegments weren’t provided
     (updates.points ?? []).every((p, i) =>
       pointsEqual(
         p,

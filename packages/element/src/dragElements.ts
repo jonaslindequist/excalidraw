@@ -65,7 +65,6 @@ const collectRecursiveFrameChildren = (
 ): NonDeletedExcalidrawElement[] => {
   const elementsToAdd: NonDeletedExcalidrawElement[] = [];
   const all = scene.getNonDeletedElementsIncludingHidden();
-  console.log("All: ", all);
   let considered = 0,
     matched = 0,
     recursed = 0;
@@ -161,7 +160,7 @@ export const dragSelectedElements = (
 
   if (frames.length > 0) {
     const recursiveChildren = collectRecursiveFrameChildren(frames, scene);
-    console.log("Children: ", recursiveChildren);
+
     for (const el of recursiveChildren) {
       elementsToUpdate.add(el);
       if (!pointerDownState.originalElements.has(el.id)) {
