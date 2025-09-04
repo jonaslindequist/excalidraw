@@ -999,6 +999,22 @@ export const shouldApplyFrameClip = (
     return false;
   }
 
+  if (isFrameLikeElement(element)) {
+    return false;
+  }
+
+  if (element.frameId && element.frameId !== frame.id) {
+    const inner = elementsMap.get(element.frameId) as
+      | ExcalidrawFrameLikeElement
+      | undefined;
+
+    if (inner && isFrameLikeElement(inner)) {
+      // you already have this helper in the file
+      if (isDescendantFrame(inner, frame, elementsMap)) {
+        return false;
+      }
+    }
+  }
   // for individual elements, only clip when the element is
   // a. overlapping with the frame, or
   // b. containing the frame, for example when an element is used as a background

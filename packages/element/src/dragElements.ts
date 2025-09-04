@@ -58,6 +58,90 @@ const getHiddenParentId = (el: any): string | null => {
 
 // Debug end
 
+const getById = (arr: readonly ExcalidrawElement[]) =>
+  new Map(arr.map((e) => [e.id, e] as const));
+
+const isDescOf = (
+  el: ExcalidrawElement,
+  rootId: string,
+  byId: Map<string, ExcalidrawElement>,
+) => {
+  let cur: ExcalidrawElement | undefined = el;
+  while (cur?.frameId) {
+    if (cur.frameId === rootId) return true;
+    cur = byId.get(cur.frameId);
+  }
+  return false;
+};
+
+// indices of a frame's full subtree (all descendants, + the frame itself)
+const getSubtreeIndices = (
+  elements: readonly ExcalidrawElement[],
+  frameId: string,
+) => {
+  const byId = getById(elements);
+  const out: number[] = [];
+  for (let i = 0; i < elements.length; i++) {
+    const e = elements[i];
+    if (e.id === frameId || isDescOf(e, frameId, byId)) out.push(i);
+  }
+  return out;
+};
+
+// AABB overlap check
+const rectsOverlap = (a: ExcalidrawElement, b: ExcalidrawElement): boolean => {
+  const ax1 = a.x,
+    ay1 = a.y,
+    ax2 = a.x + a.width,
+    ay2 = a.y + a.height;
+  const bx1 = b.x,
+    by1 = b.y,
+    bx2 = b.x + b.width,
+    by2 = b.y + b.height;
+  return ax1 < bx2 && ax2 > bx1 && ay1 < by2 && ay2 > by1;
+};
+
+// Reorder: move all `movingBlocks` so they appear immediately before `targetFrameId`
+const previewReorderBeforeFrame = (
+  scene: Scene,
+  movingFrameIds: string[],
+  targetFrameId: string,
+) => {
+  const all = scene.getNonDeletedElementsIncludingHidden();
+  const byId = getById(all);
+
+  // Collect indices to move (full subtrees)
+  const toMoveIdx = new Set<number>();
+  for (const fid of movingFrameIds) {
+    for (const i of getSubtreeIndices(all, fid)) toMoveIdx.add(i);
+  }
+  if (!toMoveIdx.size) return;
+
+  // Split moving/staying preserving order
+  const moving: ExcalidrawElement[] = [];
+  const staying: ExcalidrawElement[] = [];
+  all.forEach((el, i) =>
+    toMoveIdx.has(i) ? moving.push(el) : staying.push(el),
+  );
+
+  // Where to insert in STAYING? Just before the target frame (its current pos in staying)
+  const insertAt = staying.findIndex((e) => e.id === targetFrameId);
+  if (insertAt < 0) return;
+
+  const next = [
+    ...staying.slice(0, insertAt),
+    ...moving,
+    ...staying.slice(insertAt),
+  ];
+
+  // Apply (Scene usually exposes a replace/update; fall back to mutate if needed)
+  if ((scene as any).replaceAllElements) {
+    (scene as any).replaceAllElements(next);
+  } else if ((scene as any).app?.updateScene) {
+    (scene as any).app.updateScene({ elements: next });
+  }
+};
+
 const collectRecursiveFrameChildren = (
   frameIds: string[],
   scene: Scene,
@@ -209,6 +293,64 @@ export const dragSelectedElements = (
       updateBoundElements(element, scene, {
         simultaneouslyUpdated: Array.from(elementsToUpdate),
       });
+
+      const movingFrameIds = selectedElements
+        .filter((e) => isFrameLikeElement(e))
+        .map((e) => e.id);
+
+      if (movingFrameIds.length) {
+        const all = scene.getNonDeletedElementsIncludingHidden();
+        const byId = getById(all);
+
+        // Top-most overlapping frame that is NOT (a) one of the moving frames,
+        // and NOT (b) a descendant of any moving frame (avoid illegal parenting),
+        // and NOT (c) an ancestor of the moving frames (also avoid cycles).
+        const movingFrames = movingFrameIds
+          .map((id) => byId.get(id)!)
+          .filter(Boolean);
+
+        const forbid = new Set<string>(movingFrameIds);
+        // forbid ancestors of moving frames (can’t parent into own ancestor)
+        for (const mf of movingFrames) {
+          let cur = mf;
+          while (cur.frameId) {
+            forbid.add(cur.frameId);
+            const p = byId.get(cur.frameId);
+            if (!p) break;
+            cur = p;
+          }
+        }
+
+        // candidate = highest z (last in array) frame that overlaps any moving frame
+        // and isn’t forbidden
+        let candidate: ExcalidrawElement | undefined;
+        for (let i = all.length - 1; i >= 0; i--) {
+          const el = all[i];
+          if (!isFrameLikeElement(el)) continue;
+          if (forbid.has(el.id)) continue;
+
+          // overlap any moving frame?
+          if (movingFrames.some((mf) => rectsOverlap(mf, el))) {
+            candidate = el;
+            break;
+          }
+        }
+
+        // Only re-run when target changes
+        const keyNow = candidate
+          ? `${movingFrameIds.sort().join(",")}->${candidate.id}`
+          : "";
+        const lastKey = (pointerDownState as any).__zPreviewKey as
+          | string
+          | undefined;
+        if (keyNow && keyNow !== lastKey) {
+          previewReorderBeforeFrame(scene, movingFrameIds, candidate!.id);
+          (pointerDownState as any).__zPreviewKey = keyNow;
+        } else if (!candidate) {
+          // Leaving a frame: clear the key so we can preview again later
+          (pointerDownState as any).__zPreviewKey = "";
+        }
+      }
     }
   });
 };
