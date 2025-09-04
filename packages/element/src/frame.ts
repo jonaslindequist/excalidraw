@@ -1,13 +1,12 @@
 import { arrayToMap } from "@excalidraw/common";
-import { isPointWithinBounds, pointFrom } from "@excalidraw/math";
-import { doLineSegmentsIntersect } from "@excalidraw/utils/bbox";
-import { elementsOverlappingBBox } from "@excalidraw/utils/withinBounds";
-
 import type {
   AppClassProperties,
   AppState,
   StaticCanvasAppState,
 } from "@excalidraw/excalidraw/types";
+import { isPointWithinBounds, pointFrom } from "@excalidraw/math";
+import { doLineSegmentsIntersect } from "@excalidraw/utils/bbox";
+import { elementsOverlappingBBox } from "@excalidraw/utils/withinBounds";
 
 import type { ReadonlySetLike } from "@excalidraw/common/utility-types";
 
@@ -29,6 +28,7 @@ import {
 
 import type { ExcalidrawElementsIncludingDeleted } from "./Scene";
 
+import { syncMovedIndices } from "./fractionalIndex";
 import type {
   ElementsMap,
   ElementsMapOrArray,
@@ -505,14 +505,89 @@ export const isDescendantFrame = (
 
   return false;
 };
+// --- helpers ---------------------------------------------------------------
 
-/**
- * Retains (or repairs for target frame) the ordering invriant where children
- * elements come right before the parent frame:
- * [el, el, child, child, frame, el]
- *
- * @returns mutated allElements (same data structure)
- */
+const isDescendantOfFrameId = (
+  el: ExcalidrawElement,
+  frameId: string,
+  byId: Map<string, ExcalidrawElement>,
+) => {
+  let cur: ExcalidrawElement | undefined = el;
+  while (cur?.frameId) {
+    if (cur.frameId === frameId) return true;
+    cur = byId.get(cur.frameId);
+  }
+  return false;
+};
+
+// Moves the FRAME to sit just BEFORE its earliest descendant (so children render on top).
+// Preserves relative order of everything else.
+const ensureFrameBeforeChildren = (
+  elements: readonly ExcalidrawElement[],
+  frameId: string,
+): readonly ExcalidrawElement[] => {
+  const byId = new Map(elements.map((e) => [e.id, e] as const));
+  const frameIdx = elements.findIndex((e) => e.id === frameId);
+  if (frameIdx < 0) return elements;
+
+  // find first descendant index (smallest i where el is in subtree of frameId)
+  let firstDescIdx = -1;
+  for (let i = 0; i < elements.length; i++) {
+    if (i === frameIdx) continue;
+    if (isDescendantOfFrameId(elements[i], frameId, byId)) {
+      firstDescIdx = i;
+      break;
+    }
+  }
+  if (firstDescIdx < 0) return elements; // no children → nothing to fix
+
+  // Split out the frame
+  const frame = elements[frameIdx];
+  const staying: ExcalidrawElement[] = [];
+  elements.forEach((el, i) => {
+    if (i !== frameIdx) staying.push(el);
+  });
+
+  // Compute insert position in 'staying' that corresponds to 'firstDescIdx' in the original
+  // (i.e., just before the earliest descendant after removing the frame)
+  const insertAt = elements.slice(0, firstDescIdx).reduce((acc, _el, i) => {
+    // count only indices that remain in 'staying' (i.e., everything except the frame)
+    return i === frameIdx ? acc : acc + 1;
+  }, 0);
+
+  const reordered = [
+    ...staying.slice(0, insertAt),
+    frame,
+    ...staying.slice(insertAt),
+  ];
+
+  // keep fractional indices consistent (only frame moved)
+  const movedMap = new Map<string, ExcalidrawElement>([[frame.id, frame]]);
+  syncMovedIndices(reordered, movedMap);
+
+  // return new reference only if changed
+  for (let i = 0; i < elements.length; i++) {
+    if (elements[i] !== reordered[i]) return reordered;
+  }
+  return elements;
+};
+
+// Walk up ancestors (frameId → frameId → …) to collect all parent frames.
+const collectAncestorFrames = (
+  startFrameId: string,
+  byId: Map<string, ExcalidrawElement>,
+) => {
+  const out: string[] = [];
+  let cur: ExcalidrawElement | undefined = byId.get(startFrameId);
+  while (cur?.frameId) {
+    out.push(cur.frameId);
+    cur = byId.get(cur.frameId);
+  }
+  return out;
+};
+
+// --- drop-in: replace your addElementsToFrame ------------------------------
+
 export const addElementsToFrame = <T extends ElementsMapOrArray>(
   allElements: T,
   elementsToAdd: NonDeletedExcalidrawElement[],
@@ -528,60 +603,112 @@ export const addElementsToFrame = <T extends ElementsMapOrArray>(
   }
 
   const suppliedElementsToAddSet = new Set(elementsToAdd.map((el) => el.id));
-
   const finalElementsToAdd: ExcalidrawElement[] = [];
 
+  // allow moving frames into frames; just avoid re-adding children of a moving frame
   const otherFrames = new Set<ExcalidrawFrameLikeElement["id"]>();
-
   for (const element of elementsToAdd) {
-    if (element.id !== frame.id) {
-      otherFrames.add(element.id);
-    }
+    if (element.id !== frame.id) otherFrames.add(element.id);
   }
 
-  // - add bound text elements if not already in the array
-  // - filter out elements that are already in the frame
+  // keep your existing filtering + bound text inclusion
   for (const element of omitGroupsContainingFrameLikes(
     allElements,
     elementsToAdd,
   )) {
-    // don't add frames or their children
     if (element.frameId && otherFrames.has(element.frameId)) {
-      continue;
+      continue; // that frame will carry its own subtree
     }
-
-    // if the element is already in another frame (which is also in elementsToAdd),
-    // it means that frame and children are selected at the same time
-    // => keep original frame membership, do not add to the target frame
     if (
       element.frameId &&
       appState.selectedElementIds[element.id] &&
       appState.selectedElementIds[element.frameId]
     ) {
-      continue;
+      continue; // keep original membership when both selected
     }
-
     if (!currTargetFrameChildrenMap.has(element.id)) {
       finalElementsToAdd.push(element);
     }
 
-    const boundTextElement = getBoundTextElement(element, elementsMap);
+    const boundText = getBoundTextElement(element, elementsMap);
     if (
-      boundTextElement &&
-      !suppliedElementsToAddSet.has(boundTextElement.id) &&
-      !currTargetFrameChildrenMap.has(boundTextElement.id)
+      boundText &&
+      !suppliedElementsToAddSet.has(boundText.id) &&
+      !currTargetFrameChildrenMap.has(boundText.id)
     ) {
-      finalElementsToAdd.push(boundTextElement);
+      finalElementsToAdd.push(boundText);
     }
   }
 
+  // update membership
   for (const element of finalElementsToAdd) {
-    mutateElement(element, elementsMap, {
-      frameId: frame.id,
-    });
+    mutateElement(element, elementsMap, { frameId: frame.id });
   }
 
-  return allElements;
+  // z-order repair (array or map)
+  const toArray = (els: ElementsMapOrArray): ExcalidrawElement[] =>
+    Array.isArray(els)
+      ? (els as ExcalidrawElement[])
+      : Array.from(els.values());
+
+  const fromArraySameShape = <T extends ElementsMapOrArray>(
+    shape: T,
+    arr: ExcalidrawElement[],
+  ): T => {
+    if (Array.isArray(shape)) {
+      return arr as unknown as T;
+    }
+    const map = shape as unknown as Map<string, ExcalidrawElement>;
+    map.clear();
+    for (const e of arr) map.set(e.id, e);
+    return shape;
+  };
+
+  // If nothing was added, keep as-is
+  if (!finalElementsToAdd.length) return allElements;
+
+  // Reorder all impacted frames: the target frame, any frames we just added,
+  // and the ancestors of all those frames — outermost to innermost.
+  {
+    let arr = toArray(allElements);
+    const byId = new Map(arr.map((e) => [e.id, e] as const));
+
+    const impacted = new Set<string>();
+    impacted.add(frame.id);
+
+    for (const el of finalElementsToAdd) {
+      if (el.type === "frame") impacted.add(el.id);
+    }
+
+    // include ancestors of each impacted frame so nesting stays correct
+    const queue = Array.from(impacted);
+    for (const fid of queue) {
+      for (const anc of collectAncestorFrames(fid, byId)) {
+        if (!impacted.has(anc)) {
+          impacted.add(anc);
+          queue.push(anc);
+        }
+      }
+    }
+
+    // reorder outermost first: approximate by sorting impacted by "depth"
+    const depth = (fid: string) => {
+      let d = 0;
+      let cur: ExcalidrawElement | undefined = byId.get(fid);
+      while (cur?.frameId) {
+        d++;
+        cur = byId.get(cur.frameId);
+      }
+      return d;
+    };
+    const ordered = Array.from(impacted).sort((a, b) => depth(a) - depth(b));
+
+    for (const fid of ordered) {
+      arr = ensureFrameBeforeChildren(arr, fid) as ExcalidrawElement[];
+    }
+
+    return fromArraySameShape(allElements, arr);
+  }
 };
 
 export const removeElementsFromFrame = (

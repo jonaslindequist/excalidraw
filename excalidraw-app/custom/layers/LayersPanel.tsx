@@ -12,6 +12,12 @@ import {
   revealElement,
   toggleFrameCollapsed,
 } from "../expandable-frames/imperativeOverlay";
+import {
+  analyzeFrameSubtree,
+  buildOrderMaps,
+  logZOrder,
+  OrderBadge,
+} from "./layers-panel-debug";
 
 /** ----------------------------------------------------------------------------
  * Types & model
@@ -31,6 +37,9 @@ type Node =
       collapsedCanvas: boolean; // canvas collapsed state
       hiddenByFrame: boolean;
       children: Node[];
+      pos?: number;
+      idx?: string;
+      frameOk?: boolean; // invariant status
     }
   | {
       kind: "element";
@@ -38,6 +47,8 @@ type Node =
       name: string;
       type: string;
       hiddenByFrame: boolean;
+      pos?: number;
+      idx?: string;
     };
 
 enum ViewMode {
@@ -241,6 +252,8 @@ export function LayersPanel({ api, eventTarget }: Props) {
   const selectedIds = appState.selectedElementIds;
   const theme = appState.theme;
 
+  const order = useMemo(() => buildOrderMaps(all), [all]);
+
   const tree = useMemo<Node[]>(() => {
     const byId = new Map(all.map((e) => [e.id, e] as const));
     const frames = all.filter(
@@ -262,6 +275,8 @@ export function LayersPanel({ api, eventTarget }: Props) {
       type: el.type,
       hiddenByFrame:
         !!(el as any).customData?.__hiddenByFrame || !!el.isDeleted,
+      pos: order.pos.get(el.id),
+      idx: order.fidx.get(el.id),
     });
     const cmpIndex = (a: any, b: any) => {
       const ia = (a?.index ?? "") as string;
@@ -295,6 +310,8 @@ export function LayersPanel({ api, eventTarget }: Props) {
         }
       }
 
+      const rep = analyzeFrameSubtree(all, f.id);
+
       return {
         kind: "frame",
         id: f.id,
@@ -302,6 +319,10 @@ export function LayersPanel({ api, eventTarget }: Props) {
         collapsedCanvas,
         hiddenByFrame,
         children: kids,
+        // NEW:
+        pos: order.pos.get(f.id),
+        idx: order.fidx.get(f.id),
+        frameOk: !!rep.ok,
       };
     };
 
@@ -395,6 +416,11 @@ export function LayersPanel({ api, eventTarget }: Props) {
             </button>
 
             {/* Type icon */}
+            <OrderBadge
+              pos={node.pos}
+              idx={node.idx}
+              warn={node.frameOk === false}
+            />
             <div style={{ width: 14, display: "grid", placeItems: "center" }}>
               <TypeIcon type="frame" />
             </div>
@@ -533,6 +559,15 @@ export function LayersPanel({ api, eventTarget }: Props) {
         </button>
         <button className="btn" onClick={closeAllUi} title="Fold all (UI)">
           ▶▶
+        </button>
+        <button
+          className="btn"
+          onClick={() =>
+            logZOrder(api.getSceneElementsIncludingDeleted(), "LayersPanel")
+          }
+          title="Log z-order to console"
+        >
+          Log
         </button>
       </div>
 
