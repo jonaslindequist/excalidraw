@@ -157,6 +157,7 @@ import {
   getSelectedGroupIds,
   getSelectionStateForElements,
   getSuggestedBindingsForArrows,
+  getTargetFrame,
   getTransformHandleTypeFromCoords,
   getVisibleSceneBounds,
   hasBoundTextElement,
@@ -9807,6 +9808,34 @@ class App extends React.Component<AppProps, AppState> {
           newElement: null,
           suggestedBindings: [],
         });
+      }
+
+      if (newElement && !isFrameLikeElement(newElement)) {
+        const elementsMap = this.scene.getNonDeletedElementsMap();
+
+        // Prefer the frame under the pointer-up location; fall back to geometry/selection helper
+        const sceneCoordsNow = viewportCoordsToSceneCoords(
+          childEvent,
+          this.state,
+        );
+        const targetFrame =
+          this.getTopLayerFrameAtSceneCoords(sceneCoordsNow) ??
+          getTargetFrame(newElement, elementsMap, this.state);
+
+        if (targetFrame) {
+          // Only bind when it actually overlaps/contains (avoids accidental binds)
+          if (elementOverlapsWithFrame(newElement, targetFrame, elementsMap)) {
+            this.scene.mutateElement(newElement, { frameId: targetFrame.id });
+
+            // Make sure the frame paints just before its earliest descendant,
+            // so the new child renders on top (not behind the frame)
+            const repaired = repairFramesZOrder(
+              this.scene.getElementsIncludingDeleted(),
+              [targetFrame.id],
+            );
+            this.scene.replaceAllElements(repaired);
+          }
+        }
       }
 
       if (

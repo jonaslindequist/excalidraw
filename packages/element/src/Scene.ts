@@ -10,6 +10,7 @@ import {
   toBrandedType,
 } from "@excalidraw/common";
 import {
+  ensureFrameBeforeChildren,
   getElementsInGroup,
   isFrameLikeElement,
   isNonDeletedElement,
@@ -324,23 +325,53 @@ export class Scene {
   }
 
   replaceAllElements(nextElements: ElementsMapOrArray) {
-    // we do trust the insertion order on the map, though maybe we shouldn't and should prefer order defined by fractional indices
+    // normalize and sanity-check indices (existing behavior)
     const _nextElements = toArray(nextElements);
     const nextFrameLikes: ExcalidrawFrameLikeElement[] = [];
 
     validateIndicesThrottled(_nextElements);
 
-    this.elements = syncInvalidIndices(_nextElements);
+    // 1) normalize fractional indices first (keeps rest of pipeline happy)
+    let arr = syncInvalidIndices(_nextElements);
+
+    // 2) enforce "frame before children" invariant (outermost → innermost)
+    {
+      const byId = new Map(arr.map((e) => [e.id, e] as const));
+      const depth = (fid: string) => {
+        let d = 0;
+        let cur = byId.get(fid);
+        while (cur?.frameId) {
+          d++;
+          cur = byId.get(cur.frameId);
+        }
+        return d;
+      };
+      const frames = arr
+        .filter(isFrameLikeElement)
+        .sort((a, b) => depth(a.id) - depth(b.id));
+
+      for (const f of frames) {
+        arr = ensureFrameBeforeChildren(arr, f.id) as typeof arr;
+      }
+
+      // keep indices consistent after reordering (only order changed)
+      syncMovedIndices(arr, new Map());
+    }
+
+    // 3) write through to scene state (existing behavior)
+    this.elements = arr;
     this.elementsMap.clear();
-    this.elements.forEach((element) => {
+
+    for (const element of this.elements) {
       if (isFrameLikeElement(element)) {
         nextFrameLikes.push(element);
       }
       this.elementsMap.set(element.id, element);
-    });
-    const nonDeletedElements = getNonDeletedElements(this.elements);
-    this.nonDeletedElements = nonDeletedElements.elements;
-    this.nonDeletedElementsMap = nonDeletedElements.elementsMap;
+    }
+
+    const nonDeleted = getNonDeletedElements(this.elements);
+    this.nonDeletedElements = nonDeleted.elements;
+    this.nonDeletedElementsMap = nonDeleted.elementsMap;
 
     this.frames = nextFrameLikes;
     this.nonDeletedFramesLikes = getNonDeletedElements(this.frames).elements;

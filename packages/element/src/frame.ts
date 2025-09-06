@@ -522,7 +522,7 @@ const isDescendantOfFrameId = (
 
 // Moves the FRAME to sit just BEFORE its earliest descendant (so children render on top).
 // Preserves relative order of everything else.
-const ensureFrameBeforeChildren = (
+export const ensureFrameBeforeChildren = (
   elements: readonly ExcalidrawElement[],
   frameId: string,
 ): readonly ExcalidrawElement[] => {
