@@ -1,24 +1,31 @@
 import {
   newFrameElement /* <- from @excalidraw/element */,
 } from "@excalidraw/element";
+
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+
 import { toggleFrameCollapsed } from "../expandable-frames/imperativeOverlay";
+
 import { anchorToXY } from "./anchor";
-import { Plan } from "./schemas";
+
 import { resolveSelector } from "./selectors";
 import { FactsStore } from "./store";
+
+import type { Plan } from "./schemas";
 
 /** Get a frame client rect by id (in scene coords) */
 function getFrameRectById(api: ExcalidrawImperativeAPI, id: string) {
   const el = api.getSceneElementsIncludingDeleted().find((e) => e.id === id);
-  if (!el) return null;
+  if (!el) {
+    return null;
+  }
   return { x: el.x, y: el.y, w: el.width, h: el.height };
 }
 
 /** Create a simple text element (fallback) */
 function createTextElement(x: number, y: number, text: string) {
   // Minimal text object (Excalidraw will size/normalize at runtime)
-  const id = "el_" + Math.random().toString(36).slice(2, 10);
+  const id = `el_${Math.random().toString(36).slice(2, 10)}`;
   return {
     id,
     type: "text",
@@ -58,7 +65,7 @@ function createRectElement(
   h: number,
   label?: string,
 ) {
-  const id = "el_" + Math.random().toString(36).slice(2, 10);
+  const id = `el_${Math.random().toString(36).slice(2, 10)}`;
   return {
     id,
     type: "rectangle",
@@ -89,7 +96,7 @@ function createArrowElement(
   to: { x: number; y: number },
   label?: string,
 ) {
-  const id = "el_" + Math.random().toString(36).slice(2, 10);
+  const id = `el_${Math.random().toString(36).slice(2, 10)}`;
   return {
     id,
     type: "arrow",
@@ -129,8 +136,12 @@ export async function applyPlan(api: ExcalidrawImperativeAPI, plan: Plan) {
   let elements = api.getSceneElementsIncludingDeleted();
 
   const resolveFrameId = (idOrTemp?: string | null) => {
-    if (!idOrTemp) return null;
-    if (idOrTemp.startsWith?.("@")) return tempToReal.get(idOrTemp) || null;
+    if (!idOrTemp) {
+      return null;
+    }
+    if (idOrTemp.startsWith?.("@")) {
+      return tempToReal.get(idOrTemp) || null;
+    }
     return idOrTemp;
   };
 
@@ -171,7 +182,7 @@ export async function applyPlan(api: ExcalidrawImperativeAPI, plan: Plan) {
       push(frame);
       flush();
 
-      tempToReal.set("@" + op.tempId, frame.id);
+      tempToReal.set(`@${op.tempId}`, frame.id);
     } else if (op.op === "create_element") {
       const [cx, cy] = anchorToXY(api, op.anchor, tempToReal, (id) =>
         frameRectById(id),
@@ -195,7 +206,9 @@ export async function applyPlan(api: ExcalidrawImperativeAPI, plan: Plan) {
           op.label,
         );
         // TODO: add ellipse/diamond/image variants as needed
-        if (op.type !== "rectangle") newEl.type = op.type;
+        if (op.type !== "rectangle") {
+          newEl.type = op.type;
+        }
       }
 
       // assign frame (either selector or @tempId or plain id)
@@ -221,13 +234,17 @@ export async function applyPlan(api: ExcalidrawImperativeAPI, plan: Plan) {
       push(newEl);
       flush();
 
-      if (op.tempId) tempToReal.set("@" + op.tempId, newEl.id);
+      if (op.tempId) {
+        tempToReal.set(`@${op.tempId}`, newEl.id);
+      }
     } else if (op.op === "connect") {
       const fromIds = resolveSelector(api, op.from as any, tempToReal);
       const toIds = resolveSelector(api, op.to as any, tempToReal);
       const from = elements.find((e) => e.id === fromIds[0]);
       const to = elements.find((e) => e.id === toIds[0]);
-      if (!from || !to) continue;
+      if (!from || !to) {
+        continue;
+      }
 
       const fx = from.x + from.width / 2;
       const fy = from.y + from.height / 2;
@@ -243,11 +260,15 @@ export async function applyPlan(api: ExcalidrawImperativeAPI, plan: Plan) {
       flush();
     } else if (op.op === "update") {
       const ids = resolveSelector(api, op.target as any, tempToReal);
-      if (!ids.length) continue;
+      if (!ids.length) {
+        continue;
+      }
       const idset = new Set(ids);
 
       elements = elements.map((el: any) => {
-        if (!idset.has(el.id)) return el;
+        if (!idset.has(el.id)) {
+          return el;
+        }
         const cd = el.customData ?? {};
         let next = el;
 
@@ -283,7 +304,9 @@ export async function applyPlan(api: ExcalidrawImperativeAPI, plan: Plan) {
       flush();
     } else if (op.op === "ensure_fact") {
       const fact = FactsStore.ensure(op.kind, op.attrs);
-      if (op.tempId) tempToReal.set("@" + op.tempId, fact.id);
+      if (op.tempId) {
+        tempToReal.set(`@${op.tempId}`, fact.id);
+      }
     } else if (op.op === "link_fact") {
       const ids = resolveSelector(api, op.target as any, tempToReal);
       let factId: string | null = null;

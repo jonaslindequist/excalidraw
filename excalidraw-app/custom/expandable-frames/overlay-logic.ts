@@ -1,12 +1,14 @@
 // overlay-logic.ts
 import { updateElbowArrowPoints } from "@excalidraw/element";
+
+import { bumpVersion } from "@excalidraw/excalidraw";
+
 import type {
   ExcalidrawElbowArrowElement,
   ExcalidrawElement,
   ExcalidrawFrameElement,
   NonDeletedSceneElementsMap,
 } from "@excalidraw/element/types";
-import { bumpVersion } from "@excalidraw/excalidraw";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 
 export type ById = Map<string, ExcalidrawElement>;
@@ -58,13 +60,17 @@ export function forceRerouteElbowsForFrames(
   const updates = new Map<string, ExcalidrawElement>();
 
   for (const el of live) {
-    if (el.type !== "arrow") continue;
+    if (el.type !== "arrow") {
+      continue;
+    }
     const arrow: any = el;
 
     // elbow-only
     const isElbow = arrow.elbowed === true;
 
-    if (!isElbow) continue;
+    if (!isElbow) {
+      continue;
+    }
 
     // must be bound to a toggled frame
     const sb = arrow.startBinding?.elementId;
@@ -86,7 +92,9 @@ export function forceRerouteElbowsForFrames(
       },
       { isDragging: true }, // “like drag” produces stable exits with padding
     );
-    if (!upd1 || (!upd1.points && !upd1.width && !upd1.height)) continue;
+    if (!upd1 || (!upd1.points && !upd1.width && !upd1.height)) {
+      continue;
+    }
 
     const mid = { ...arrow, ...upd1 };
     map.set(arrow.id, mid); // so the next pass sees latest geometry
@@ -114,18 +122,26 @@ export function rerouteElbowsTouchingFrames(
   const updates = new Map<string, ExcalidrawElement>();
 
   for (const el of live) {
-    if (el.type !== "arrow") continue;
+    if (el.type !== "arrow") {
+      continue;
+    }
     const arrow = el as any;
     const isElbow =
       arrow.elbowed === true || (arrow.fixedSegments?.length ?? 0) > 0;
-    if (!isElbow) continue;
+    if (!isElbow) {
+      continue;
+    }
 
     const sb = arrow.startBinding?.elementId;
     const eb = arrow.endBinding?.elementId;
-    if (!((sb && changed.has(sb)) || (eb && changed.has(eb)))) continue;
+    if (!((sb && changed.has(sb)) || (eb && changed.has(eb)))) {
+      continue;
+    }
 
     // optional: skip pathological self-bound arrows if you want:
-    if (sb && eb && sb === eb) continue;
+    if (sb && eb && sb === eb) {
+      continue;
+    }
 
     updates.set(arrow.id, recomputeElbowArrow(arrow, elementsMap, zoom));
   }
@@ -138,7 +154,9 @@ export const buildIndexes = (all: readonly ExcalidrawElement[]) => {
   const childrenByFrame = new Map<string, ExcalidrawElement[]>();
   for (const el of all) {
     if (el.frameId) {
-      if (!childrenByFrame.has(el.frameId)) childrenByFrame.set(el.frameId, []);
+      if (!childrenByFrame.has(el.frameId)) {
+        childrenByFrame.set(el.frameId, []);
+      }
       childrenByFrame.get(el.frameId)!.push(el);
     }
   }
@@ -154,7 +172,9 @@ export const walkDescendants = (
   while (stack.length) {
     const el = stack.pop()!;
     fn(el);
-    if (isFrame(el)) stack.push(...(childrenByFrame.get(el.id) ?? []));
+    if (isFrame(el)) {
+      stack.push(...(childrenByFrame.get(el.id) ?? []));
+    }
   }
 };
 export const getFrameTitle = (frame: ExcalidrawFrameElement) => {
@@ -170,7 +190,9 @@ export const computeHiddenGlobal = (byId: ById) => {
     let cur: ExcalidrawElement | undefined = el;
     while (cur?.frameId) {
       const parent = byId.get(cur.frameId);
-      if (!parent) break;
+      if (!parent) {
+        break;
+      }
       if ((parent as any).customData?.collapsed) {
         hidden.add(el.id);
         break;
@@ -190,7 +212,9 @@ export const applyHiddenByFrame = (
     const prevHidden = !!cd.__hiddenByFrame;
 
     // no change → keep same reference
-    if (prevHidden === nextHidden) return el;
+    if (prevHidden === nextHidden) {
+      return el;
+    }
 
     if (nextHidden) {
       // mark hidden, do not touch isDeleted

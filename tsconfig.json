@@ -31,6 +31,6 @@
       "@excalidraw/utils/*": ["./packages/utils/src/*"]
     }
   },
-  "include": ["packages", "excalidraw-app"],
-  "exclude": ["examples", "dist", "types", "tests"]
+  "include": ["excalidraw-app/src", "excalidraw-app/**/*.d.ts", "packages/*/src", "setupTests.ts", "vitest.config.mts"],
+  "exclude": ["node_modules", "dist", "build", "coverage", "examples", "dev-docs", "public", "scripts", "firebase-project", "types", "tests", "packages/*/dist", "**/__tests__/**", "**/*.spec.*"]
 }

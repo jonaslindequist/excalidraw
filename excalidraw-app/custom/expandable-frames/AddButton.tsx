@@ -1,5 +1,6 @@
 import { newFrameElement } from "@excalidraw/element";
 import { viewportCoordsToSceneCoords } from "@excalidraw/excalidraw";
+
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 
 export function AddExpandableFrameButton({
@@ -12,7 +13,9 @@ export function AddExpandableFrameButton({
   defaultHeight?: number;
 }) {
   const addFrame = () => {
-    if (!api) return;
+    if (!api) {
+      return;
+    }
 
     const appState = api.getAppState();
     const { width: vpW, height: vpH, offsetLeft, offsetTop } = appState;

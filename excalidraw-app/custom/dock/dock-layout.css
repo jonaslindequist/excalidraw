@@ -1,48 +1,68 @@
+/* Dock Layout — drop-in replacement */
 .dock-layout {
   position: relative;
-  height: 100vh; /* or 100% of parent */
+  height: 100%; /* was 100vh; lets the parent control height */
   width: 100%;
   display: grid;
   grid-template-columns: auto 6px 1fr 6px auto; /* left | handle | center | handle | right */
   grid-template-rows: 100%;
+  min-height: 0;
+  min-width: 0;
   overflow: hidden;
+  background: var(--island-bg-color, #fff);
+  box-sizing: border-box;
 }
 
-.dock-sidebar {
-  position: relative;
-  z-index: 30;
-} /* was none */
-.dock-handle {
-  z-index: 10;
-  position: relative;
-  background-color: rgb(145, 255, 0);
-} /* ensure below sidebar */
-.dock-center {
-  position: relative;
-  overflow: hidden;
-  display: flex;
-  min-width: 0;
-  min-height: 0;
+/* Explicit placement (safer than auto-placement for future DOM tweaks) */
+.dock-layout > .dock-sidebar.left {
+  grid-column: 1;
+  grid-row: 1;
+}
+.dock-layout > .dock-handle.left {
+  grid-column: 2;
+  grid-row: 1;
+}
+.dock-layout > .dock-center {
+  grid-column: 3;
+  grid-row: 1;
+}
+.dock-layout > .dock-handle.right {
+  grid-column: 4;
+  grid-row: 1;
+}
+.dock-layout > .dock-sidebar.right {
+  grid-column: 5;
+  grid-row: 1;
 }
 
 /* Sidebars */
 .dock-sidebar {
-  background: var(--panel-bg, #fff);
-  border-right: 1px solid #e5e7eb;
+  position: relative;
+  z-index: 30;
   display: flex;
   flex-direction: column;
-  min-width: 0; /* allow collapse to 0 */
+  height: 100%;
+  min-width: 0; /* allows collapse to width: 0 */
+  overflow: auto;
+  background: var(--panel-bg, #fff);
+  border-right: 1px solid var(--color-border, #e5e7eb);
+  transition: width 120ms ease; /* smooth open/close + resize */
+  box-sizing: border-box;
 }
 .dock-sidebar.right {
   border-right: none;
-  border-left: 1px solid #e5e7eb;
+  border-left: 1px solid var(--color-border, #e5e7eb);
 }
 
 /* Center editor container */
 .dock-center {
   position: relative;
-  overflow: hidden; /* Excalidraw will stretch inside */
+  overflow: hidden; /* Excalidraw stretches inside */
   display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  box-sizing: border-box;
 }
 .dock-center > * {
   flex: 1 1 auto;
@@ -50,7 +70,22 @@
   min-height: 0;
 }
 
-/* Headers */
+/* Ensure embedded Excalidraw fills center */
+.dock-center > .excalidraw-embed,
+.dock-center > .excalidraw-embed > * {
+  height: 100%;
+  min-height: 0;
+}
+
+/* Overlay root inside center (for headers, etc.) */
+.dock-center .overlay-root {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5; /* above canvas, below sidebars/toolbars */
+}
+
+/* Headers in sidebars */
 .dock-header {
   height: 36px;
   display: flex;
@@ -59,6 +94,7 @@
   padding: 0 8px;
   border-bottom: 1px solid #e5e7eb;
   font-size: 12px;
+  background: var(--island-bg-color, #fff);
 }
 .dock-btn {
   margin-left: auto;
@@ -70,17 +106,36 @@
   cursor: pointer;
 }
 
-/* Drag handles */
+/* Drag handles (6px tracks) */
 .dock-handle {
+  position: relative;
+  z-index: 20; /* under sidebars, above canvas */
   cursor: col-resize;
+}
+/* Visual feedback */
+.dock-handle::before {
+  content: "";
+  position: absolute;
+  inset: 0;
   background: transparent;
 }
-.dock-handle.left:hover,
-.dock-handle.right:hover {
+.dock-handle:hover::before {
   background: rgba(0, 0, 0, 0.06);
 }
+.dock-handle:active::before {
+  background: rgba(0, 0, 0, 0.12);
+}
+/* Expand the hit area a bit for easier grabbing */
+.dock-handle::after {
+  content: "";
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  left: -4px;
+  right: -4px;
+}
 
-/* Rails (when collapsed) */
+/* Rails (when a sidebar is collapsed) */
 .dock-rail {
   position: absolute;
   top: 50%;
@@ -91,8 +146,11 @@
   border-radius: 6px;
   background: #fff;
   cursor: pointer;
-  z-index: 5;
+  z-index: 40;
   opacity: 0.9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .dock-rail.left {
   left: 8px;
@@ -100,3 +158,32 @@
 .dock-rail.right {
   right: 8px;
 }
+
+/* Dark theme polish */
+.theme--dark .dock-sidebar {
+  background: var(--panel-bg, #0f172a);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+.theme--dark .dock-header {
+  background: var(--island-bg-color, #0b1220);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+.theme--dark .dock-btn {
+  background: var(--island-bg-color, #0b1220);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+.theme--dark .dock-rail {
+  background: var(--island-bg-color, #0b1220);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+/* Optional: if upstream .excalidraw-app tries to take over the page,
+   keep it contained inside the center pane.
+   (Only needed if you still render that class inside DockLayout) */
+/*
+.dock-center .excalidraw-app {
+  position: static !important;
+  inset: auto !important;
+  height: 100% !important;
+}
+*/

@@ -1,5 +1,6 @@
-import { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
-import { AnchorT } from "./schemas";
+import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+
+import type { AnchorT } from "./schemas";
 
 // 1) Give alignTo a precise return type
 type XY = readonly [number, number];
@@ -71,14 +72,18 @@ export function anchorToXY(
   } else if (a.ref.startsWith("frame:")) {
     const id = a.ref.slice("frame:".length);
     const rect = getFrameRectById(id);
-    if (rect) refRect = rect;
+    if (rect) {
+      refRect = rect;
+    }
   } else if (a.ref.startsWith("@")) {
     const real = tempToReal.get(a.ref);
     if (real) {
       const el = api
         .getSceneElementsIncludingDeleted()
         .find((e) => e.id === real);
-      if (el) refRect = { x: el.x, y: el.y, w: el.width, h: el.height };
+      if (el) {
+        refRect = { x: el.x, y: el.y, w: el.width, h: el.height };
+      }
     }
   }
 

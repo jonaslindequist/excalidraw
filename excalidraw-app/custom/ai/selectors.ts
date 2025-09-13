@@ -1,7 +1,9 @@
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+
+import { FactsStore } from "./store";
+
 import type { z } from "zod";
 import type { Selector as SelectorT } from "./schemas";
-import { FactsStore } from "./store";
 
 /** Resolve a selector or @tempId → concrete element ids (array) */
 export function resolveSelector(
@@ -19,7 +21,9 @@ export function resolveSelector(
   }
   const els = api.getSceneElementsIncludingDeleted();
 
-  if ("byId" in selOrId) return [selOrId.byId];
+  if ("byId" in selOrId) {
+    return [selOrId.byId];
+  }
 
   if ("byTitle" in selOrId) {
     return els
@@ -43,7 +47,9 @@ export function resolveSelector(
           FactsStore.get(e.customData.factId)?.kind === kind,
       )
       .filter((e: any) => {
-        if (!attrs) return true;
+        if (!attrs) {
+          return true;
+        }
         const f = FactsStore.get(e.customData!.factId)!;
         return Object.entries(attrs).every(([k, v]) => f.attrs?.[k] === v);
       })
@@ -52,7 +58,9 @@ export function resolveSelector(
   if ("inFrame" in selOrId) {
     const frameIds = resolveSelector(api, (selOrId as any).inFrame, tempToReal);
     const frameId = frameIds[0];
-    if (!frameId) return [];
+    if (!frameId) {
+      return [];
+    }
     const list = els.filter((e) => e.frameId === frameId);
     if ((selOrId as any).filter?.type) {
       return list

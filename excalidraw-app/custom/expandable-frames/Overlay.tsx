@@ -1,12 +1,14 @@
 import { sceneCoordsToViewportCoords } from "@excalidraw/excalidraw";
 
-import {
+import { useMemo } from "react";
+
+import type {
   ExcalidrawElement,
   ExcalidrawFrameElement,
   FractionalIndex,
 } from "@excalidraw/element/types";
+
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
-import { useMemo } from "react";
 
 import {
   buildIndexes,
@@ -21,7 +23,9 @@ export function ExpandableFrameOverlay({
 }: {
   api: ExcalidrawImperativeAPI | null;
 }) {
-  if (!api) return null;
+  if (!api) {
+    return null;
+  }
 
   const appState = api.getAppState();
   const elements = api.getSceneElements();
@@ -48,7 +52,9 @@ export function ExpandableFrameOverlay({
     const all = api.getSceneElementsIncludingDeleted();
     const { byId, childrenByFrame } = buildIndexes(all);
     const frame = byId.get(frameId) as ExcalidrawFrameElement | undefined;
-    if (!frame || !isFrame(frame)) return;
+    if (!frame || !isFrame(frame)) {
+      return;
+    }
 
     // Persisted collapsed flag
     const wasCollapsed = !!(frame as any).customData?.collapsed;

@@ -140,11 +140,15 @@ import { useHandleAppTheme } from "./useHandleAppTheme";
 
 import "./index.scss";
 
+import React from "react";
+import { FactsProvider } from "./custom/facts/FactsContext";
+import { FactsPanel } from "./custom/facts/FactsPanel";
+
 import type { CollabAPI } from "./collab/Collab";
 import { DockLayout } from "./custom/dock/DockLayout";
 import { AddExpandableFrameButton } from "./custom/expandable-frames";
 import { mountExpandableFramesOverlay } from "./custom/expandable-frames/imperativeOverlay";
-import { FactsPanel } from "./custom/facts/FactsPanel";
+import { InventoryPage } from "./custom/facts/InventoryPages";
 import { LayersPanel } from "./custom/layers/LayersPanel";
 import { CommandBar } from "./custom/ui/commandBar";
 
@@ -152,6 +156,7 @@ polyfill();
 
 window.EXCALIDRAW_THROTTLE_RENDER = true;
 
+console.info("[excalidraw-app] Mounted custom ExcalidrawApp");
 declare global {
   interface BeforeInstallPromptEventChoiceResult {
     outcome: "accepted" | "dismissed";
@@ -834,7 +839,7 @@ const ExcalidrawWrapper = () => {
   return (
     <div
       style={{ height: "100%" }}
-      className={clsx("excalidraw-app", {
+      className={clsx("excalidraw-embed", {
         "is-collaborating": isCollaborating,
       })}
     >
@@ -1252,18 +1257,109 @@ const ExcalidrawWrapper = () => {
     </div>
   );
 };
+type View = "diagram" | "inventory";
 
 const ExcalidrawApp = () => {
+  const [view, setView] = React.useState<View>("diagram");
+  const [sceneNonce, setSceneNonce] = React.useState(0);
+
+  // subscribe to scene updates so frames list refreshes automatically
+  React.useEffect(() => {
+    const app = (window as any).app;
+    const scene = app?.scene;
+    if (!scene?.onUpdate) return;
+    // seed initial
+    setSceneNonce(scene.getSceneNonce?.() ?? 0);
+    const off = scene.onUpdate(() => {
+      const n = scene.getSceneNonce?.();
+      setSceneNonce((prev) => (typeof n === "number" ? n : prev + 1));
+    });
+    return off;
+  }, []);
+
+  // derive frames from scene
+  const frames = React.useMemo(() => {
+    const arr: { id: string; title: string }[] = [];
+    const map = (window as any).app?.scene?.getNonDeletedElementsMap?.();
+    if (map) {
+      for (const el of map.values()) {
+        if (el.type === "frame" || el.type === "magicframe") {
+          const title = (el as any).customData?.title ?? el.name ?? "Frame";
+          arr.push({ id: el.id, title });
+        }
+      }
+    }
+    return arr;
+  }, [sceneNonce]);
+
+  // jump to a frame from Inventory
+  const jumpToFrame = React.useCallback((frameId: string) => {
+    const app = (window as any).app;
+    const el = app?.scene?.getElement?.(frameId);
+    if (!app || !el) {
+      return;
+    }
+
+    app.setState({
+      selectedElementIds: { [frameId]: true },
+      // optional: close any popups etc if you want
+    });
+
+    // if you have a helper to center/zoom on an element, call it here:
+    // app.centerOnElement?.(el);  // or app.scrollToContent?.(el);
+
+    app.scene?.triggerUpdate?.();
+    setView("diagram");
+  }, []);
+
   const isCloudExportWindow =
     window.location.pathname === "/excalidraw-plus-export";
   if (isCloudExportWindow) {
     return <ExcalidrawPlusIframeExport />;
   }
+  const isActive = view === "diagram";
 
   return (
     <TopErrorBoundary>
       <Provider store={appJotaiStore}>
-        <ExcalidrawWrapper />
+        <FactsProvider>
+          <div className="app-shell">
+            {/* Header */}
+            <div className="app-header" data-ui>
+              <div style={{ fontWeight: 600 }}>Your App</div>
+
+              <div style={{ marginLeft: 16 }}>
+                <div className="tabs">
+                  <button
+                    className="tab"
+                    role="tab"
+                    aria-selected={view === "diagram"}
+                    onClick={() => setView("diagram")}
+                  >
+                    Diagram
+                  </button>
+                  <button
+                    className="tab"
+                    role="tab"
+                    aria-selected={view === "inventory"}
+                    onClick={() => setView("inventory")}
+                  >
+                    Inventory
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="app-body">
+              {view === "diagram" ? (
+                <ExcalidrawWrapper />
+              ) : (
+                <InventoryPage frames={frames} onJumpToFrame={jumpToFrame} />
+              )}
+            </div>
+          </div>
+        </FactsProvider>
       </Provider>
     </TopErrorBoundary>
   );

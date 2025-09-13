@@ -1,3 +1,98 @@
+/* Make the viewport height available to the app */
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+/* App shell: header + body */
+.app-shell {
+  height: 100vh; /* fill the viewport */
+  display: flex;
+  flex-direction: column;
+  min-height: 0; /* allow children to shrink */
+}
+
+/* Header row */
+.app-header {
+  height: 48px; /* same as your old h-12 (3rem) if you prefer: 3rem */
+  flex: 0 0 48px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #fff;
+  z-index: 50;
+}
+
+/* Body (everything below header) */
+.app-body {
+  flex: 1 1 auto;
+  min-height: 0; /* critical so DockLayout can fill */
+  display: block; /* or flex if you prefer */
+}
+
+/* Your embedded editor wrapper */
+.excalidraw-embed {
+  position: relative;
+  height: 100%; /* fill .app-body */
+  min-height: 0;
+}
+
+:root {
+  --btn-h: 36px;
+  --btn-r: 8px;
+  --c-bg: #fff;
+  --c-fg: #111;
+  --c-primary: #111827;
+  --c-primary-fg: #fff;
+  --c-border: #e5e7eb;
+  --ring: 0 0 0 3px rgba(59, 130, 246, 0.35);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--btn-h);
+  padding: 0 12px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--btn-r);
+  background: var(--c-bg);
+  color: var(--c-fg);
+  font: 500 13px/1.1 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, box-shadow 0.12s,
+    color 0.12s;
+}
+.btn:hover {
+  background: #f8fafc;
+}
+.btn:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.btn--primary {
+  background: var(--c-primary);
+  color: var(--c-primary-fg);
+  border-color: var(--c-primary);
+}
+.btn--primary:hover {
+  filter: brightness(1.05);
+}
+.btn--ghost {
+  background: transparent;
+  border-color: var(--c-border);
+}
+.btn--active {
+  background: #111827;
+  color: #fff;
+  border-color: #111827;
+}
+
 .excalidraw {
   --color-primary-contrast-offset: #625ee0; // to offset Chubb illusion
 
@@ -76,6 +171,27 @@
   }
 }
 
+#root,
+.dock-layout,
+.dock-center {
+  outline: 1px solid red;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  margin: 0;
+}
+
+.excalidraw-embed {
+  position: relative; /* not fixed */
+  height: 100%;
+  min-height: 0;
+}
+
 .excalidraw-app.is-collaborating {
   [data-testid="clear-canvas-button"] {
     display: none;
@@ -113,5 +229,77 @@
     &:hover {
       color: black !important;
     }
+  }
+}
+
+@import "tailwindcss";
+
+@layer components {
+  [data-ui] button {
+    @apply inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-gray-300 bg-white text-gray-900 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500/50 appearance-none;
+  }
+  [data-ui] button[data-variant="primary"] {
+    @apply bg-gray-900 text-white border-gray-900;
+  }
+  [data-ui] .tabs {
+    @apply inline-flex items-center gap-1 p-1 border border-gray-200 rounded-xl bg-white;
+  }
+  [data-ui] .tab {
+    @apply h-8 px-3 rounded-lg border border-transparent;
+  }
+  [data-ui] .tab[aria-selected="true"] {
+    @apply bg-gray-900 text-white border-gray-900;
+  }
+  [data-ui] input[type="text"],
+  [data-ui] select {
+    @apply h-9 px-3 rounded-md border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/40;
+  }
+  [data-ui] .panel {
+    @apply bg-white border border-gray-200 rounded-xl;
+  }
+}
+
+/* Everything inside [data-ui] gets sane defaults using Tailwind utilities */
+@layer components {
+  /* Buttons */
+  [data-ui] button {
+    @apply inline-flex items-center gap-1.5
+           h-9 px-3 rounded-lg
+           border border-gray-300
+           bg-white text-gray-900 shadow-sm
+           hover:bg-gray-50 active:bg-gray-100
+           focus:outline-none focus:ring-2 focus:ring-blue-500/50
+           appearance-none;
+  }
+  /* Emphasized/primary buttons (opt-in via data-variant) */
+  [data-ui] button[data-variant="primary"] {
+    @apply bg-gray-900 text-white border-gray-900;
+  }
+
+  /* Tabs container */
+  [data-ui] .tabs {
+    @apply inline-flex items-center gap-1 p-1
+           border border-gray-200 rounded-xl bg-white;
+  }
+  /* Tab buttons: use aria-selected to mark the active one */
+  [data-ui] .tab {
+    @apply h-8 px-3 rounded-lg border border-transparent;
+  }
+  [data-ui] .tab[aria-selected="true"] {
+    @apply bg-gray-900 text-white border-gray-900;
+  }
+
+  /* Inputs */
+  [data-ui] input[type="text"],
+  [data-ui] input[type="search"],
+  [data-ui] select {
+    @apply h-9 px-3 rounded-md border border-gray-300
+           bg-white text-gray-900
+           focus:outline-none focus:ring-2 focus:ring-blue-500/40;
+  }
+
+  /* Panels/cards */
+  [data-ui] .panel {
+    @apply bg-white border border-gray-200 rounded-xl;
   }
 }

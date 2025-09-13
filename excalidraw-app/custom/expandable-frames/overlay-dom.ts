@@ -17,7 +17,9 @@ export const measureTextPx = (text: string, fontCss: string) => {
   if (!__measureCtx) {
     __measureCtx = document.createElement("canvas").getContext("2d");
   }
-  if (!__measureCtx) return text.length * 7; // safe fallback
+  if (!__measureCtx) {
+    return text.length * 7;
+  } // safe fallback
   __measureCtx.font = fontCss;
   return Math.ceil(__measureCtx.measureText(text).width);
 };

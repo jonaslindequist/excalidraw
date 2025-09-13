@@ -4,6 +4,9 @@ import {
   newLinearElement,
   newTextElement,
 } from "@excalidraw/element";
+
+import type { LocalPoint } from "@excalidraw/math";
+
 import type {
   ExcalidrawElement,
   ExcalidrawFrameElement,
@@ -11,8 +14,9 @@ import type {
   OrderedExcalidrawElement,
 } from "@excalidraw/element/types";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
-import { LocalPoint } from "@excalidraw/math";
+
 import { alignTopLeftFromAnchor } from "./anchor";
+
 import type { Plan, SelectorT } from "./schemas";
 
 /* ------------------------------------------------------------------ */
@@ -34,13 +38,13 @@ export function createInMemoryFactsStore(): FactsStore {
   return {
     ensure(kind, attrs, idHint) {
       // dumb deterministic-ish id
-      const base = idHint
-        ? slug(idHint)
-        : slug(kind + "-" + (attrs.name ?? ""));
+      const base = idHint ? slug(idHint) : slug(`${kind}-${attrs.name ?? ""}`);
       let id =
         base || `${slug(kind)}-${Math.random().toString(36).slice(2, 8)}`;
       let i = 1;
-      while (byId.has(id)) id = `${base}-${i++}`;
+      while (byId.has(id)) {
+        id = `${base}-${i++}`;
+      }
       byId.set(id, { kind, attrs });
       return id;
     },
@@ -72,7 +76,9 @@ function resolveSelector(
     const { kind, attrs } = selector.byFact;
     return elements.filter((e) => {
       const cd = (e as any).customData ?? {};
-      if (!cd.factId) return false;
+      if (!cd.factId) {
+        return false;
+      }
       // If you persist facts somewhere richer, adapt this:
       return cd.factKind === kind
         ? !attrs ||
@@ -87,7 +93,9 @@ function resolveSelector(
     const f = selector.inFrame as any;
     if (typeof f?.byId === "string") {
       const el = elements.find((e) => e.id === f.byId);
-      if (el) frames = [el];
+      if (el) {
+        frames = [el];
+      }
     } else if (typeof f?.byTitle === "string") {
       frames = elements.filter(
         (e) => (e as any).customData?.title === f.byTitle && e.type === "frame",
@@ -112,7 +120,9 @@ function getFrameRectByIdFactory(elements: () => readonly ExcalidrawElement[]) {
     const f = elements().find((e) => e.id === id && e.type === "frame") as
       | ExcalidrawFrameElement
       | undefined;
-    if (!f) return null;
+    if (!f) {
+      return null;
+    }
     return { x: f.x, y: f.y, w: f.width, h: f.height };
   };
 }
@@ -226,7 +236,7 @@ export async function executePlan(
   const getFrameRectById = getFrameRectByIdFactory(elementsFn);
 
   const nextIndex = (afterIdx?: FractionalIndex): FractionalIndex =>
-    ((afterIdx ?? "a") + "a") as FractionalIndex;
+    `${afterIdx ?? "a"}a` as FractionalIndex;
 
   // wherever you build the working array, make sure it's mutable & typed
   let elements: OrderedExcalidrawElement[] = [
@@ -303,7 +313,9 @@ export async function executePlan(
 
         // store title in customData.title
         upsert(frame, { title: op.title });
-        if (op.tempId) tempToReal.set("@" + op.tempId, frame.id);
+        if (op.tempId) {
+          tempToReal.set(`@${op.tempId}`, frame.id);
+        }
         break;
       }
 
@@ -315,9 +327,11 @@ export async function executePlan(
         // resolve frame target (can be selector, real id, or @tempId)
         let frameId: string | null = null;
         if (typeof op.frame === "string") {
-          if (op.frame.startsWith("@"))
+          if (op.frame.startsWith("@")) {
             frameId = tempToReal.get(op.frame) ?? null;
-          else frameId = op.frame || null;
+          } else {
+            frameId = op.frame || null;
+          }
         } else if (op.frame) {
           const matches = resolveSelector(op.frame as any, elements);
           const first = matches.find((e) => e.type === "frame");
@@ -374,7 +388,9 @@ export async function executePlan(
           factMeta,
         });
 
-        if (op.tempId) tempToReal.set("@" + op.tempId, el.id);
+        if (op.tempId) {
+          tempToReal.set(`@${op.tempId}`, el.id);
+        }
         break;
       }
 
@@ -382,16 +398,21 @@ export async function executePlan(
         const all = elements;
         const left = resolveTarget(op.from, all)[0];
         const right = resolveTarget(op.to, all)[0];
-        if (!left || !right) break;
+        if (!left || !right) {
+          break;
+        }
 
         const map = byId();
         const { cx: x1, cy: y1 } = centerOf(left, map);
         const { cx: x2, cy: y2 } = centerOf(right, map);
 
         const arrow = makeArrow(x1, y1, x2, y2, op.style?.label);
-        if (op.style?.dashed) (arrow as any).strokeStyle = "dashed";
-        if (op.style?.thickness)
+        if (op.style?.dashed) {
+          (arrow as any).strokeStyle = "dashed";
+        }
+        if (op.style?.thickness) {
           (arrow as any).strokeWidth = op.style.thickness;
+        }
 
         // ensure it’s ordered and (optionally) framed
         upsert(arrow, { frame: commonFrame(left, right) });
@@ -445,7 +466,9 @@ export async function executePlan(
 
       case "ensure_fact": {
         const id = facts.ensure(op.kind, op.attrs, op.tempId);
-        if (op.tempId) tempToReal.set("@" + op.tempId, id);
+        if (op.tempId) {
+          tempToReal.set(`@${op.tempId}`, id);
+        }
         break;
       }
 
@@ -468,7 +491,9 @@ export async function executePlan(
 
         if (factId) {
           elements = elements.map((e) => {
-            if (!targets.find((t) => t.id === e.id)) return e;
+            if (!targets.find((t) => t.id === e.id)) {
+              return e;
+            }
             const cd0 = (e as any).customData ?? {};
             return {
               ...e,

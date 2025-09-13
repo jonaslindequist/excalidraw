@@ -1,15 +1,17 @@
 // imperativeOverlay.ts
-import type {
-  ExcalidrawElement,
-  ExcalidrawFrameElement,
-} from "@excalidraw/element/types";
 import {
   bumpVersion,
   sceneCoordsToViewportCoords,
 } from "@excalidraw/excalidraw";
+
+import type {
+  ExcalidrawElement,
+  ExcalidrawFrameElement,
+} from "@excalidraw/element/types";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 
 import { updateElbowArrowPoints } from "../../../packages/element/src";
+
 import {
   CLAMP_PAD,
   COLLAPSED_H,
@@ -43,6 +45,41 @@ import {
 const isHiddenByFrame = (el: { customData?: any }) =>
   !!el?.customData?.__hiddenByFrame;
 
+// Move given element IDs to the end of the array (front), preserving relative order.
+const collectFrameSubtreeIds = (
+  rootFrameIds: string[],
+  childrenByFrame: Map<string, readonly ExcalidrawElement[]>,
+): string[] => {
+  const out = new Set<string>();
+  const stack = [...rootFrameIds];
+  for (const id of stack) out.add(id);
+
+  while (stack.length) {
+    const fid = stack.pop()!;
+    const kids = childrenByFrame.get(fid) ?? [];
+    for (const k of kids) {
+      if (!out.has(k.id)) {
+        out.add(k.id);
+        if (k.type === "frame") stack.push(k.id);
+      }
+    }
+  }
+  return [...out];
+};
+
+// Move given element IDs to the end (front), preserving relative order.
+const bringIdsToFront = <T extends { id: string }>(
+  elements: readonly T[],
+  ids: string[],
+): T[] => {
+  if (!ids.length) return elements as T[];
+  const target = new Set(ids);
+  const stayed: T[] = [];
+  const lifted: T[] = [];
+  for (const el of elements) (target.has(el.id) ? lifted : stayed).push(el);
+  return [...stayed, ...lifted];
+};
+
 export function revealElement(
   api: ExcalidrawImperativeAPI,
   elementId: string,
@@ -62,14 +99,18 @@ export function revealElement(
   const { byId } = buildIndexes(all);
 
   const target = byId.get(elementId);
-  if (!target) return;
+  if (!target) {
+    return;
+  }
 
   // expand collapsed ancestors
   const framesToExpand: ExcalidrawFrameElement[] = [];
   let cur: ExcalidrawElement | undefined = target;
   while (cur?.frameId) {
     const parent = byId.get(cur.frameId);
-    if (!parent || parent.type !== "frame") break;
+    if (!parent || parent.type !== "frame") {
+      break;
+    }
     if ((parent as any).customData?.collapsed) {
       framesToExpand.push(parent as ExcalidrawFrameElement);
     }
@@ -80,7 +121,9 @@ export function revealElement(
   if (framesToExpand.length) {
     working = working.map((el) => {
       const isOne = framesToExpand.some((fr) => fr.id === el.id);
-      if (!isOne) return el;
+      if (!isOne) {
+        return el;
+      }
 
       const cd: any = (el as any).customData ?? {};
       const size = cd.originalSize ?? {
@@ -99,7 +142,9 @@ export function revealElement(
         collapsed: false,
         originalSize: size,
       };
-      if (stableTitle) cdNext.title = stableTitle;
+      if (stableTitle) {
+        cdNext.title = stableTitle;
+      }
 
       const updated: any = {
         ...el,
@@ -107,14 +152,23 @@ export function revealElement(
         height: size.h,
         customData: cdNext,
       };
-      if (el.type === "frame" && !prevName && stableTitle)
+      if (el.type === "frame" && !prevName && stableTitle) {
         updated.name = stableTitle;
+      }
 
       return updated as ExcalidrawElement;
     });
 
     const hidden = computeHiddenGlobal(new Map(working.map((e) => [e.id, e])));
     working = applyHiddenByFrame(working, hidden);
+
+    const { childrenByFrame } = buildIndexes(working);
+    const idsToLift = collectFrameSubtreeIds(
+      framesToExpand.map((f) => f.id),
+      childrenByFrame,
+    );
+    working = bringIdsToFront(working, idsToLift);
+
     api.updateScene({ elements: working });
 
     forceRerouteElbowsForFrames(
@@ -148,18 +202,24 @@ export const rerouteElbowsTouchingFrames = (
   const updates = new Map<string, ExcalidrawElement>();
 
   for (const el of live) {
-    if (el.type !== "arrow") continue;
+    if (el.type !== "arrow") {
+      continue;
+    }
     const arrow: any = el;
 
     // elbow-only
     const isElbow =
       arrow.elbowed === true || (arrow.fixedSegments?.length ?? 0) > 0;
-    if (!isElbow) continue;
+    if (!isElbow) {
+      continue;
+    }
 
     // must be bound to a changed frame
     const sb = arrow.startBinding?.elementId;
     const eb = arrow.endBinding?.elementId;
-    if (!(sb && changed.has(sb)) && !(eb && changed.has(eb))) continue;
+    if (!(sb && changed.has(sb)) && !(eb && changed.has(eb))) {
+      continue;
+    }
 
     // make an ephemeral copy with fixedSegments cleared so routing is unconstrained
     const ep = { ...arrow, fixedSegments: null } as any;
@@ -206,20 +266,25 @@ export function toggleFrameCollapsed(
   const { byId, childrenByFrame } = buildIndexes(all);
 
   const root = byId.get(frameId);
-  if (!root || root.type !== "frame") return;
+  if (!root || root.type !== "frame") {
+    return;
+  }
 
   const desiredCollapsed = !(root as any).customData?.collapsed;
   const framesToToggle: ExcalidrawFrameElement[] = [root];
   if (recursive) {
     walkDescendants(root, childrenByFrame, (el) => {
-      if (el.type === "frame")
+      if (el.type === "frame") {
         framesToToggle.push(el as ExcalidrawFrameElement);
+      }
     });
   }
 
   const next = all.map((el) => {
     const shouldToggle = framesToToggle.some((fr) => fr.id === el.id);
-    if (!shouldToggle) return el;
+    if (!shouldToggle) {
+      return el;
+    }
 
     const prevCD: any = (el as any).customData ?? {};
     const nextOriginalSize = desiredCollapsed
@@ -240,7 +305,9 @@ export function toggleFrameCollapsed(
       collapsed: desiredCollapsed,
       originalSize: nextOriginalSize,
     };
-    if (stableTitle) cdNext.title = stableTitle; // only set if non-empty
+    if (stableTitle) {
+      cdNext.title = stableTitle;
+    } // only set if non-empty
 
     const updated: any = { ...el, width, height, customData: cdNext };
 
@@ -259,7 +326,16 @@ export function toggleFrameCollapsed(
     framesToToggle.map((f) => f.id),
   );
 
-  api.updateScene({ elements: rerouted });
+  let finalElements = rerouted;
+  if (!desiredCollapsed) {
+    // expanding → lift whole subtree(s)
+    const idsToLift = collectFrameSubtreeIds(
+      framesToToggle.map((f) => f.id),
+      childrenByFrame, // from buildIndexes(all)
+    );
+    finalElements = bringIdsToFront(rerouted, idsToLift);
+  }
+  api.updateScene({ elements: finalElements });
 
   forceRerouteElbowsForFrames(
     api,
@@ -281,6 +357,7 @@ export function mountExpandableFramesOverlay(
 
   const overlayEl = document.createElement("div");
   overlayEl.setAttribute("data-exca-overlay", "frames");
+
   setStyle(overlayEl, {
     position: "absolute",
     inset: "0",
@@ -291,7 +368,7 @@ export function mountExpandableFramesOverlay(
 
   const container =
     opts?.container ??
-    (document.querySelector(".dock-center") as HTMLElement) ??
+    (document.querySelector(".excalidraw") as HTMLElement) ??
     document.body;
 
   container.appendChild(overlayEl);
@@ -300,7 +377,9 @@ export function mountExpandableFramesOverlay(
   // rAF-throttled render
   let rafPending = false;
   const schedule = () => {
-    if (rafPending) return;
+    if (rafPending) {
+      return;
+    }
     rafPending = true;
     requestAnimationFrame(() => {
       rafPending = false;
@@ -337,7 +416,9 @@ export function mountExpandableFramesOverlay(
 
         const all = api.getSceneElementsIncludingDeleted();
         const next = all.map((el) => {
-          if (el.id !== frame.id) return el;
+          if (el.id !== frame.id) {
+            return el;
+          }
           const cd = (el as any).customData ?? {};
           const updated: any = {
             ...el,
@@ -380,7 +461,6 @@ export function mountExpandableFramesOverlay(
     const zoom = appState.zoom.value;
 
     const rect = root.getBoundingClientRect();
-
     const isDark = appState.theme === "dark";
     const bg = isDark ? "rgba(24,24,28,0.85)" : "rgba(255,255,255,0.9)";
     const fg = isDark ? "#e5e7eb" : "#111";
@@ -400,9 +480,13 @@ export function mountExpandableFramesOverlay(
       // If hidden-by-frame, hide existing header/mini (if any) and skip work
       if (hidden) {
         const maybeHeader = headers.get(frame.id);
-        if (maybeHeader) maybeHeader.style.display = "none";
+        if (maybeHeader) {
+          maybeHeader.style.display = "none";
+        }
         const maybeMini = miniLabels.get(frame.id);
-        if (maybeMini) maybeMini.style.display = "none";
+        if (maybeMini) {
+          maybeMini.style.display = "none";
+        }
         continue;
       }
 
@@ -449,7 +533,9 @@ export function mountExpandableFramesOverlay(
           const labelEl = header!.querySelector(
             "[data-exca-frame-label]",
           ) as HTMLDivElement | null;
-          if (labelEl) startInlineRename(frame, header!, labelEl);
+          if (labelEl) {
+            startInlineRename(frame, header!, labelEl);
+          }
         });
         header.addEventListener("mouseenter", () => {});
         header.addEventListener("mouseleave", () => {
@@ -605,7 +691,9 @@ export function mountExpandableFramesOverlay(
       header.style.width = "auto";
       header.style.minWidth = "0";
       header.style.maxWidth = "none";
-      if (labelEl) labelEl.style.display = "block";
+      if (labelEl) {
+        labelEl.style.display = "block";
+      }
 
       const natural = Math.ceil(header.scrollWidth);
 
@@ -640,7 +728,9 @@ export function mountExpandableFramesOverlay(
         header.style.visibility = "visible";
       } else {
         header.style.display = "none";
-        if (labelEl) labelEl.style.display = "none";
+        if (labelEl) {
+          labelEl.style.display = "none";
+        }
       }
 
       // mini label
@@ -777,9 +867,13 @@ export function mountExpandableFramesOverlay(
       ro.disconnect();
       root.removeEventListener("exca:camera", (() => {}) as EventListener);
       root.removeEventListener("exca:scene", (() => {}) as EventListener);
-      for (const [, el] of headers) el.remove();
+      for (const [, el] of headers) {
+        el.remove();
+      }
       headers.clear();
-      for (const [, el] of miniLabels) el.remove();
+      for (const [, el] of miniLabels) {
+        el.remove();
+      }
       miniLabels.clear();
       root.remove();
     },
@@ -820,10 +914,14 @@ export function projectFrameTitlesForExport(
   elements: readonly ExcalidrawElement[],
 ) {
   return elements.map((el) => {
-    if (el.type !== "frame") return el;
+    if (el.type !== "frame") {
+      return el;
+    }
     const cd = (el as any).customData ?? {};
     const title = cd.title ?? el.name ?? "";
-    if (!title) return el;
+    if (!title) {
+      return el;
+    }
     return { ...el, name: title } as ExcalidrawElement;
   });
 }

@@ -1,4 +1,4 @@
-import {
+import type {
   ExcalidrawArrowElement,
   ExcalidrawElement,
   ExcalidrawFrameElement,
@@ -20,7 +20,9 @@ export function buildIndexes(all: readonly ExcalidrawElement[]) {
   for (const el of all) {
     byId.set(el.id, el);
     if (el.frameId) {
-      if (!childrenByFrame.has(el.frameId)) childrenByFrame.set(el.frameId, []);
+      if (!childrenByFrame.has(el.frameId)) {
+        childrenByFrame.set(el.frameId, []);
+      }
       childrenByFrame.get(el.frameId)!.push(el);
     }
   }
@@ -39,7 +41,9 @@ export function walkDescendants(
     fn(el);
     if (isFrame(el)) {
       const kids = childrenByFrame.get(el.id);
-      if (kids?.length) stack.push(...kids);
+      if (kids?.length) {
+        stack.push(...kids);
+      }
     }
   }
 }
@@ -62,18 +66,17 @@ export function setHiddenByFrame(
         isDeleted: true,
         customData: { ...(el as any).customData, __hiddenByFrame: true },
       } as ExcalidrawElement;
-    } else {
-      // restore only if it was hidden by us
-      if ((el as any).customData?.__hiddenByFrame) {
-        const { __hiddenByFrame, ...rest } = (el as any).customData;
-        return {
-          ...el,
-          isDeleted: false,
-          customData: Object.keys(rest).length ? rest : undefined,
-        } as ExcalidrawElement;
-      }
-      return el;
     }
+    // restore only if it was hidden by us
+    if ((el as any).customData?.__hiddenByFrame) {
+      const { __hiddenByFrame, ...rest } = (el as any).customData;
+      return {
+        ...el,
+        isDeleted: false,
+        customData: Object.keys(rest).length ? rest : undefined,
+      } as ExcalidrawElement;
+    }
+    return el;
   });
 }
 
@@ -84,7 +87,9 @@ export function collectArrowsTouching(
 ) {
   const ids = new Set<string>();
   for (const el of elements) {
-    if (!isArrow(el)) continue;
+    if (!isArrow(el)) {
+      continue;
+    }
     const from = el?.startBinding?.elementId;
     const to = el?.endBinding?.elementId;
     if ((from && hiddenIds.has(from)) || (to && hiddenIds.has(to))) {

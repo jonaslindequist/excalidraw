@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+
 import "./layers.css";
 
 import type {
@@ -12,6 +13,7 @@ import {
   revealElement,
   toggleFrameCollapsed,
 } from "../expandable-frames/imperativeOverlay";
+
 import {
   analyzeFrameSubtree,
   buildOrderMaps,
@@ -235,7 +237,9 @@ export function LayersPanel({ api, eventTarget }: Props) {
 
   // Refresh on scene/camera updates
   useEffect(() => {
-    if (!eventTarget) return;
+    if (!eventTarget) {
+      return;
+    }
     const bump = () => setTick((t) => t + 1);
     eventTarget.addEventListener("exca:scene", bump as EventListener);
     eventTarget.addEventListener("exca:camera", bump as EventListener);
@@ -262,8 +266,9 @@ export function LayersPanel({ api, eventTarget }: Props) {
     const childrenByFrame = new Map<string, ExcalidrawElement[]>();
     for (const el of all) {
       if (el.frameId) {
-        if (!childrenByFrame.has(el.frameId))
+        if (!childrenByFrame.has(el.frameId)) {
           childrenByFrame.set(el.frameId, []);
+        }
         childrenByFrame.get(el.frameId)!.push(el);
       }
     }
@@ -347,7 +352,9 @@ export function LayersPanel({ api, eventTarget }: Props) {
   };
   const scrollTo = (id: string) => {
     const el = api.getSceneElementsIncludingDeleted().find((e) => e.id === id);
-    if (el) api.scrollToContent(el, { fitToContent: true, animate: true });
+    if (el) {
+      api.scrollToContent(el, { fitToContent: true, animate: true });
+    }
   };
   const toggleCanvasCollapse = (id: string, recursive = false) => {
     toggleFrameCollapsed(api, id, { recursive });
@@ -362,8 +369,11 @@ export function LayersPanel({ api, eventTarget }: Props) {
   const isUiOpen = (id: string) => uiOpen.has(id);
   const toggleUi = (id: string) => {
     const next = new Set(uiOpen);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
     setUiOpen(next);
   };
   const openAllUi = () => {
@@ -500,7 +510,9 @@ export function LayersPanel({ api, eventTarget }: Props) {
               const el = api
                 .getSceneElementsIncludingDeleted()
                 .find((x) => x.id === node.id);
-              if (!el) return;
+              if (!el) {
+                return;
+              }
               const current = getElementName(el) || "";
               const next = window.prompt("Name", current);
               if (next != null && next.trim() !== current) {

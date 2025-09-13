@@ -3,7 +3,7 @@ export type Fact = { id: string; kind: string; attrs: Record<string, any> };
 // trivial in-memory store (swap with your backend later)
 const facts = new Map<string, Fact>();
 
-const newId = () => "fact_" + Math.random().toString(36).slice(2, 10);
+const newId = () => `fact_${Math.random().toString(36).slice(2, 10)}`;
 
 export const FactsStore = {
   all(): Fact[] {
@@ -30,8 +30,12 @@ export const FactsStore = {
   },
   findByMatch(kind: string, match?: Record<string, any>): Fact | null {
     for (const f of facts.values()) {
-      if (f.kind !== kind) continue;
-      if (!match) return f;
+      if (f.kind !== kind) {
+        continue;
+      }
+      if (!match) {
+        return f;
+      }
       let ok = true;
       for (const [k, v] of Object.entries(match)) {
         if (f.attrs?.[k] !== v) {
@@ -39,7 +43,9 @@ export const FactsStore = {
           break;
         }
       }
-      if (ok) return f;
+      if (ok) {
+        return f;
+      }
     }
     return null;
   },

@@ -1,4 +1,4 @@
-import { ExcalidrawElement } from "@excalidraw/element/src/types";
+import type { ExcalidrawElement } from "@excalidraw/element/src/types";
 
 type OrderMaps = {
   pos: Map<string, number>; // array position (render pass order)
@@ -26,7 +26,9 @@ function isDescendantOfFrame(
 ) {
   let cur: ExcalidrawElement | undefined = el;
   while (cur?.frameId) {
-    if (cur.frameId === rootFrameId) return true;
+    if (cur.frameId === rootFrameId) {
+      return true;
+    }
     cur = byId.get(cur.frameId);
   }
   return false;
@@ -42,7 +44,9 @@ export function analyzeFrameSubtree(
 ) {
   const { byId } = buildOrderMaps(all);
   const frameIndex = all.findIndex((e) => e.id === frameId);
-  if (frameIndex < 0) return { ok: false, msg: "frame not found" };
+  if (frameIndex < 0) {
+    return { ok: false, msg: "frame not found" };
+  }
 
   const descendantIndices: number[] = [];
   all.forEach((e, i) => {
@@ -59,7 +63,9 @@ export function analyzeFrameSubtree(
 
   const gaps: number[] = [];
   for (let i = blockStart; i <= blockEnd; i++) {
-    if (!descendantIndices.includes(i)) gaps.push(i);
+    if (!descendantIndices.includes(i)) {
+      gaps.push(i);
+    }
   }
 
   const ok = gaps.length === 0 && blockEnd === shouldEnd;
@@ -106,8 +112,8 @@ export function logZOrder(
     rows
       .map(
         (r) =>
-          `${String(r.i).padStart(3)} ${r.type}${r.name ? ":" + r.name : ""}${
-            r.frame ? " [in " + r.frame + "]" : ""
+          `${String(r.i).padStart(3)} ${r.type}${r.name ? `:${r.name}` : ""}${
+            r.frame ? ` [in ${r.frame}]` : ""
           } idx=${r.idx}`,
       )
       .join("\n"),

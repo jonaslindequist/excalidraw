@@ -1,5 +1,6 @@
 // src/custom/facts/useFactStore.ts
 import { useEffect, useState } from "react";
+
 import type { FactEntity, FactStore } from "./types";
 
 export function useFactStore(store: FactStore) {

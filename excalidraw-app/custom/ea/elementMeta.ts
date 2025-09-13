@@ -26,7 +26,9 @@ export const setElementName = (
 ) => {
   const all = api.getSceneElementsIncludingDeleted();
   const next = all.map((el) => {
-    if (el.id !== id) return el;
+    if (el.id !== id) {
+      return el;
+    }
     const cd: any = (el as any).customData ?? {};
     const ea = ensureEa(cd);
     ea.name = name;
@@ -41,7 +43,9 @@ export const renameInline = (
   onDone?: () => void,
 ) => {
   const el = api.getSceneElementsIncludingDeleted().find((e) => e.id === id);
-  if (!el) return;
+  if (!el) {
+    return;
+  }
   const current = getElementName(el) ?? "";
   const next = window.prompt("Name", current);
   if (next != null && next.trim() !== current) {

@@ -1,23 +1,24 @@
-// src/custom/facts/FactsPanel.tsx
+// FactsPanel.tsx (fixed)
 import type { ExcalidrawElement } from "@excalidraw/element/types";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import { useEffect, useMemo, useState } from "react";
+import type { FactSheetBase, FactType } from "./facts-domain";
 import "./facts.css";
-import { createLocalFactStore, newFact } from "./localStore"; // or inject store from parent
-import { FACT_TYPES, FactField } from "./registry";
-import { useFactStore } from "./useFactStore";
+import { useFacts } from "./FactsContext";
 
 type Props = {
   api: ExcalidrawImperativeAPI;
   eventTarget?: EventTarget | null;
-  namespace: string; // scene/workspace key
+  namespace: string;
 };
 
 export function FactsPanel({ api, eventTarget, namespace }: Props) {
-  const store = useMemo(() => createLocalFactStore({ namespace }), [namespace]);
-  const facts = useFactStore(store);
-  const [, setTick] = useState(0);
+  // TOP-LEVEL, UNCONDITIONAL HOOKS — order must never change
+  const { facts, upsertFact, updateFact, deleteFact } = useFacts();
+  const [tick, setTick] = useState(0); // drives recompute on scene events
+  const [activeId, setActiveId] = useState<string | null>(null); // always declared
 
+  // bump on external "scene changed" events
   useEffect(() => {
     if (!eventTarget) return;
     const bump = () => setTick((t) => t + 1);
@@ -26,58 +27,88 @@ export function FactsPanel({ api, eventTarget, namespace }: Props) {
       eventTarget.removeEventListener("exca:scene", bump as EventListener);
   }, [eventTarget]);
 
-  const selected = useMemo(() => {
+  // compute current selection (exactly one element)
+  const selected: ExcalidrawElement | null = useMemo(() => {
     const ids = Object.keys(api.getAppState().selectedElementIds);
     if (ids.length !== 1) return null;
-    return (
-      (api.getSceneElementsIncludingDeleted().find((e) => e.id === ids[0]) as
-        | ExcalidrawElement
-        | undefined) ?? null
-    );
-  }, [api, api.getAppState().selectedElementIds]);
+    const el = api
+      .getSceneElementsIncludingDeleted()
+      .find((e) => e.id === ids[0]);
+    return (el as ExcalidrawElement) ?? null;
+    // depend on tick so we re-evaluate when scene changes
+  }, [api, tick]);
 
-  if (!selected) return <Empty />;
+  // figure out which facts are attached to the selected element
+  const attachedIds: string[] = useMemo(() => {
+    const cd = (selected as any)?.customData ?? {};
+    // support single id or array
+    if (Array.isArray(cd.factIds)) return cd.factIds as string[];
+    if (cd.factId) return [cd.factId as string];
+    return [];
+  }, [selected]);
 
-  const cd = (selected as any).customData ?? {};
-  const factId: string | null = cd.factId ?? null;
-  const entity = facts.get(factId);
+  const attachedFacts: FactSheetBase[] = useMemo(
+    () => facts.filter((f) => attachedIds.includes(f.id)),
+    [facts, attachedIds],
+  );
 
-  const attachExisting = (id: string) => {
-    const all = api.getSceneElementsIncludingDeleted().map((el) =>
-      el.id === selected.id
-        ? ({
-            ...el,
-            customData: { ...(el as any).customData, factId: id },
-          } as ExcalidrawElement)
-        : el,
-    );
-    api.updateScene({ elements: all });
-  };
+  // keep activeId in sync with attachments (but never declare useState conditionally)
+  useEffect(() => {
+    if (attachedFacts.length === 0) {
+      if (activeId !== null) setActiveId(null);
+      return;
+    }
+    const stillAttached =
+      activeId && attachedFacts.some((f) => f.id === activeId);
+    if (!stillAttached) {
+      setActiveId(attachedFacts[0].id);
+    }
+  }, [attachedFacts, activeId]);
 
-  const createAndAttach = (typeId: string) => {
-    const f = newFact({ typeId });
-    store.put(f);
-    attachExisting(f.id);
-  };
-
-  const detach = () => {
+  // helper: write back customData.factIds on the selected element
+  const setAttachedOnElement = (nextIds: string[]) => {
+    if (!selected) return;
     const all = api.getSceneElementsIncludingDeleted().map((el) => {
       if (el.id !== selected.id) return el;
-      const { customData } = el as any;
-      if (!customData?.factId) return el;
-      const { factId: _, ...rest } = customData;
-      return {
-        ...el,
-        customData: Object.keys(rest).length ? rest : undefined,
-      } as ExcalidrawElement;
+      const prev = (el as any).customData ?? {};
+      const { factId: _legacy, factIds: _old, ...rest } = prev;
+      const customData =
+        nextIds.length === 0 ? rest : { ...rest, factIds: nextIds };
+      return { ...el, customData } as ExcalidrawElement;
     });
     api.updateScene({ elements: all });
+    setTick((t) => t + 1);
   };
 
-  const updateField = (fieldId: string, value: any) => {
-    if (!entity) return;
-    facts.update(entity.id, { values: { ...entity.values, [fieldId]: value } });
+  const attachExisting = (id: string) => {
+    const set = new Set(attachedIds);
+    set.add(id);
+    setAttachedOnElement([...set]);
   };
+
+  const detachOne = (id: string) => {
+    setAttachedOnElement(attachedIds.filter((x) => x !== id));
+  };
+
+  const createAndAttach = async (type: FactType, title = "Untitled") => {
+    const f = await upsertFact({ type, title, namespace });
+    attachExisting(f.id);
+    setActiveId(f.id);
+  };
+
+  // EARLY RETURN is OK — all hooks are already called above
+  if (!selected) {
+    return (
+      <div className="facts-panel">
+        <div className="facts-head">
+          <strong>Fact Sheet</strong>
+        </div>
+        <div className="facts-body" style={{ opacity: 0.7 }}>
+          Select one element/frame to attach/edit a Fact Sheet.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="facts-panel">
@@ -87,40 +118,63 @@ export function FactsPanel({ api, eventTarget, namespace }: Props) {
       </div>
 
       <div className="facts-body">
-        {!entity ? (
+        {attachedFacts.length === 0 ? (
           <>
             <label className="facts-label">Attach Fact</label>
             <AttachFact
-              list={facts.list()}
+              allFacts={facts}
               onAttach={attachExisting}
               onCreate={createAndAttach}
             />
           </>
         ) : (
           <>
-            <div className="row" style={{ alignItems: "center", gap: 8 }}>
-              <strong>{entity.typeId}</strong>
-              <span style={{ opacity: 0.7 }}>#{entity.id.slice(0, 6)}</span>
-              <button style={{ marginLeft: "auto" }} onClick={detach}>
-                Detach
-              </button>
+            {/* Attached list */}
+            <div style={{ display: "grid", gap: 6, marginBottom: 8 }}>
+              {attachedFacts.map((f) => (
+                <div key={f.id} className="row" style={{ gap: 8 }}>
+                  <button
+                    className="link"
+                    onClick={() => setActiveId(f.id)}
+                    style={{
+                      fontWeight: activeId === f.id ? 600 : 400,
+                    }}
+                  >
+                    {f.title} <span style={{ opacity: 0.6 }}>· {f.type}</span>
+                  </button>
+                  <span style={{ opacity: 0.6 }}>#{f.id.slice(0, 6)}</span>
+                  <button
+                    className="muted"
+                    style={{ marginLeft: "auto" }}
+                    onClick={() => detachOne(f.id)}
+                  >
+                    Detach
+                  </button>
+                  <button
+                    className="danger"
+                    onClick={async () => {
+                      detachOne(f.id);
+                      await deleteFact(f.id);
+                    }}
+                  >
+                    Delete
+                  </button>
+                </div>
+              ))}
             </div>
 
-            {/* Dynamic fields by type */}
-            {FACT_TYPES.find((t) => t.id === entity.typeId)?.fields.map((f) => (
-              <FieldInput
-                key={f.id}
-                field={f}
-                value={entity.values[f.id] ?? ""}
-                onChange={(v) => updateField(f.id, v)}
+            {/* Active editor */}
+            {activeId && attachedFacts.some((f) => f.id === activeId) && (
+              <FactEditor
+                fact={attachedFacts.find((f) => f.id === activeId)!}
+                onChange={(patch) => updateFact(activeId, patch)}
+                onDetach={() => detachOne(activeId)}
+                onDelete={async () => {
+                  detachOne(activeId);
+                  await deleteFact(activeId);
+                }}
               />
-            ))}
-
-            {/* Quick tags */}
-            <TagsEditor
-              tags={entity.tags ?? []}
-              onChange={(tags) => facts.update(entity.id, { tags })}
-            />
+            )}
           </>
         )}
       </div>
@@ -128,36 +182,28 @@ export function FactsPanel({ api, eventTarget, namespace }: Props) {
   );
 }
 
-function Empty() {
-  return (
-    <div className="facts-panel">
-      <div className="facts-head">
-        <strong>Fact Sheet</strong>
-      </div>
-      <div className="facts-body" style={{ opacity: 0.7 }}>
-        Select one element/frame to attach/edit a Fact Sheet.
-      </div>
-    </div>
-  );
-}
+/* ---------------- helpers / subcomponents ---------------- */
 
 function AttachFact({
-  list,
+  allFacts,
   onAttach,
   onCreate,
 }: {
-  list: ReturnType<typeof useFactStore>["list"] extends () => infer R
-    ? R
-    : never;
+  allFacts: FactSheetBase[];
   onAttach: (id: string) => void;
-  onCreate: (typeId: string) => void;
+  onCreate: (type: FactType, title?: string) => void;
 }) {
   const [query, setQuery] = useState("");
-  const filtered = list.filter(
-    (f) =>
-      (f.values.name ?? "").toLowerCase().includes(query.toLowerCase()) ||
-      f.id.includes(query),
-  );
+  const [newTitle, setNewTitle] = useState("");
+  const [newType, setNewType] = useState<FactType>("Application");
+
+  const list = useMemo(() => {
+    const q = query.toLowerCase();
+    return allFacts.filter(
+      (f) => f.title.toLowerCase().includes(q) || f.id.includes(query),
+    );
+  }, [allFacts, query]);
+
   return (
     <div style={{ display: "grid", gap: 8 }}>
       <input
@@ -174,39 +220,44 @@ function AttachFact({
           borderRadius: 6,
         }}
       >
-        {filtered.length === 0 ? (
+        {list.length === 0 ? (
           <div style={{ padding: 8, opacity: 0.6 }}>No matches</div>
         ) : (
-          filtered.map((f) => (
+          list.map((f) => (
             <div
               key={f.id}
               className="layer-row"
               style={{ cursor: "pointer" }}
               onClick={() => onAttach(f.id)}
+              title={f.id}
             >
-              <div className="name" title={f.id}>
-                {f.values.name ?? "(unnamed)"} ·{" "}
-                <span style={{ opacity: 0.7 }}>{f.typeId}</span>
+              <div className="name">
+                {f.title} · <span style={{ opacity: 0.7 }}>{f.type}</span>
               </div>
             </div>
           ))
         )}
       </div>
       <div style={{ display: "flex", gap: 6 }}>
-        <select className="facts-input" id="new-type">
-          {FACT_TYPES.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.label}
+        <select
+          className="facts-input"
+          value={newType}
+          onChange={(e) => setNewType(e.target.value as FactType)}
+        >
+          {FACT_TYPE_OPTIONS.map((t) => (
+            <option key={t} value={t}>
+              {t}
             </option>
           ))}
         </select>
+        <input
+          className="facts-input"
+          placeholder="Title (optional)"
+          value={newTitle}
+          onChange={(e) => setNewTitle(e.target.value)}
+        />
         <button
-          onClick={() => {
-            const sel = (
-              document.getElementById("new-type") as HTMLSelectElement
-            ).value;
-            onCreate(sel);
-          }}
+          onClick={() => onCreate(newType, newTitle.trim() || "Untitled")}
         >
           New Fact
         </button>
@@ -215,104 +266,59 @@ function AttachFact({
   );
 }
 
-function FieldInput({
-  field,
-  value,
+function FactEditor({
+  fact,
   onChange,
+  onDetach,
+  onDelete,
 }: {
-  field: FactField;
-  value: any;
-  onChange: (v: any) => void;
+  fact: FactSheetBase;
+  onChange: (
+    patch: Partial<Omit<FactSheetBase, "id" | "type" | "namespace">>,
+  ) => void;
+  onDetach: () => void;
+  onDelete: () => void | Promise<void>;
 }) {
-  // same as before (text/select/url/number/boolean)…
-  if (field.type === "text") {
-    if (field.multiline) {
-      return (
-        <>
-          <label className="facts-label">{field.label}</label>
-          <textarea
-            className="facts-input"
-            rows={4}
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-          />
-        </>
-      );
-    }
-    return (
-      <>
-        <label className="facts-label">{field.label}</label>
+  return (
+    <div style={{ display: "grid", gap: 10, marginTop: 8 }}>
+      <div className="row" style={{ gap: 8 }}>
         <input
           className="facts-input"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
+          value={fact.title}
+          onChange={(e) => onChange({ title: e.target.value })}
         />
-      </>
-    );
-  }
-  if (field.type === "select") {
-    return (
-      <>
-        <label className="facts-label">{field.label}</label>
-        <select
-          className="facts-input"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-        >
-          <option value="">—</option>
-          {field.options.map((o) => (
-            <option key={o} value={o}>
-              {o}
-            </option>
-          ))}
-        </select>
-      </>
-    );
-  }
-  if (field.type === "url") {
-    return (
-      <>
-        <label className="facts-label">{field.label}</label>
-        <input
-          className="facts-input"
-          type="url"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-        />
-      </>
-    );
-  }
-  if (field.type === "number") {
-    return (
-      <>
-        <label className="facts-label">{field.label}</label>
-        <input
-          className="facts-input"
-          type="number"
-          value={value}
-          onChange={(e) =>
-            onChange(e.target.value === "" ? "" : Number(e.target.value))
-          }
-        />
-      </>
-    );
-  }
-  if (field.type === "boolean") {
-    return (
-      <label className="facts-checkbox">
-        <input
-          type="checkbox"
-          checked={!!value}
-          onChange={(e) => onChange(e.target.checked)}
-        />
-        {field.label}
-      </label>
-    );
-  }
-  return null;
+        <span className="badge">{fact.type}</span>
+      </div>
+
+      <label className="facts-label">Description</label>
+      <textarea
+        className="facts-input"
+        rows={4}
+        value={fact.description ?? ""}
+        onChange={(e) => onChange({ description: e.target.value })}
+      />
+
+      <label className="facts-label">Tags</label>
+      <TagEditor
+        tags={fact.tags ?? []}
+        onChange={(tags) => onChange({ tags })}
+      />
+
+      {/* more fields from schema can go here */}
+
+      <div className="row" style={{ justifyContent: "flex-end", gap: 8 }}>
+        <button className="muted" onClick={onDetach}>
+          Detach
+        </button>
+        <button className="danger" onClick={onDelete}>
+          Delete
+        </button>
+      </div>
+    </div>
+  );
 }
 
-function TagsEditor({
+function TagEditor({
   tags,
   onChange,
 }: {
@@ -359,3 +365,19 @@ function TagsEditor({
     </div>
   );
 }
+
+/* util */
+export const FACT_TYPE_OPTIONS = [
+  "Application",
+  "Capability",
+  "Process",
+  "DataObject",
+  "Service",
+  "Platform",
+  "TechComponent",
+  "Vendor",
+  "Initiative",
+  "Objective",
+  "Organization",
+  "TechCategory",
+] as const;

@@ -1,5 +1,7 @@
-import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import React, { useEffect, useMemo, useRef, useState } from "react";
+
+import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+
 import { applyPlan } from "../ai/applyPlan";
 import { generatePlanMock, type AiContext } from "../ai/mockClient";
 import { PlanSchema, type Plan } from "../ai/schemas";
@@ -84,9 +86,13 @@ export const CommandBar: React.FC<Props> = ({ api }) => {
   }, [api?.getAppState(), api?.getSceneElementsIncludingDeleted()]);
 
   const runPrompt = async () => {
-    if (!api) return;
+    if (!api) {
+      return;
+    }
     const q = inputRef.current?.value?.trim() ?? "";
-    if (!q) return;
+    if (!q) {
+      return;
+    }
     setBusy(true);
     setErr(null);
     try {
@@ -104,7 +110,9 @@ export const CommandBar: React.FC<Props> = ({ api }) => {
   };
 
   const runPlan = async () => {
-    if (!api) return;
+    if (!api) {
+      return;
+    }
     setBusy(true);
     setErr(null);
     try {
